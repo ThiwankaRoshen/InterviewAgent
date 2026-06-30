@@ -34,10 +34,12 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
     conversation_id = str(uuid.uuid4())
 
-    tracing_processor = setup_langsmith_tracing()
+    tracing_processor = setup_langsmith_tracing(
+        thread_id_provider=lambda: conversation_id,
+    )
 
     recording_path = os.path.join(tempfile.gettempdir(), f"recording_{conversation_id}.wav")
-    audio_buffer = AudioBufferProcessor()
+    audio_buffer = AudioBufferProcessor(num_channels=2)
     tracing_processor.register_recording(conversation_id, recording_path)
 
     @audio_buffer.event_handler("on_audio_data")
@@ -125,6 +127,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
         logger.info("Client disconnected")
+        await audio_buffer.stop_recording()
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=False)
