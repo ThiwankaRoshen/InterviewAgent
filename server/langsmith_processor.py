@@ -5,12 +5,8 @@ but with attributes (`transcript`, `input`/`output`, `text`, `turn.number`, …)
 that LangSmith's OTLP ingester doesn't recognize. This `SpanProcessor` rewrites
 each span type into the `gen_ai.*` / `langsmith.*` namespaces LangSmith keys
 off, renders the whole conversation onto the root span, and attaches the
-recorded audio there. It wraps its downstream exporter (mirroring the LiveKit
-processor in `..livekit.processor`) so attributes are always rewritten before
-the span is queued for export.
-
-Adapted from the official LangChain × Pipecat tracing demo
-(github.com/langchain-ai/voice-agents-tracing/blob/main/pipecat/langsmith_processor.py).
+recorded audio there. It wraps its downstream exporter so attributes are always
+rewritten before the span is queued for export.
 
 The trace shape in LangSmith:
 
@@ -23,22 +19,13 @@ The trace shape in LangSmith:
         │   ├── tools: lookup_weather (tool execution)
         │   └── model                 (final answer — spoken)
         └── tts                       (response text → audio)
-
-Note: the kind of the span Pipecat names `llm` is set by `llm_span_kind` at
-construction. This demo passes "chain" because `LangGraphLLMService` only
-orchestrates the graph — the real `llm`-kind runs are the nested model nodes.
-With a stock service doing its own inference, keep the default "llm". See the
-comment in `_handle_llm`.
-
-Thread grouping is opt-in, as in the LiveKit processor: pass
-`thread_id_provider` (a zero-arg callable returning the conversation's id) and
-every span gets `langsmith.metadata.thread_id`; without it, none is set.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import os
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -47,7 +34,8 @@ from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
+from dotenv import load_dotenv
+load_dotenv()
 
 class LangSmithSpanProcessor(SpanProcessor):
     """Enriches Pipecat's OTel spans with LangSmith-compatible attributes."""
@@ -63,14 +51,11 @@ class LangSmithSpanProcessor(SpanProcessor):
 
         Args:
             downstream_processor: where rewritten spans are forwarded; defaults
-                to `BatchSpanProcessor(OTLPSpanExporter())` (reads the OTLP
-                endpoint/headers from env).
+                to `BatchSpanProcessor(OTLPSpanExporter())`.
             llm_span_kind: LangSmith run kind for Pipecat's `llm` span. Keep
-                the default `"llm"` when the LLM stage does its own inference
-                (stock services such as `OpenAILLMService`). Pass `"chain"`
-                when it only orchestrates nested runs that are exported to
-                LangSmith themselves (our `LangGraphLLMService`) — see the
-                comment in `_handle_llm`.
+                the default `"llm"` for stock services (e.g. OpenAILLMService).
+                Pass `"chain"` when the LLM stage only orchestrates nested runs
+                that are exported to LangSmith themselves.
             thread_id_provider: opt-in conversation id for LangSmith thread
                 grouping; called per span, None disables.
         """
@@ -82,20 +67,14 @@ class LangSmithSpanProcessor(SpanProcessor):
         self.thread_id_provider = thread_id_provider
         # The latest llm request's full context per trace — each request
         # carries the whole history, so the last snapshot IS the conversation.
-        # Rendered onto the root `conversation` span, which ends last.
         self._conversation_by_trace: dict[str, list] = {}
-        self.conversation_recordings: dict[str, str] = {}  # conversation_id -> path
-        self.conversation_recorders: dict[str, object] = {}  # conversation_id -> recorder
+        self.conversation_recordings: dict[str, str] = {}
+        self.conversation_recorders: dict[str, object] = {}
 
     # -- recorder registration ------------------------------------------------
 
     def register_recording(self, conversation_id, recording_path, audio_recorder=None):
-        """Register the whole-conversation recording for the root span.
-
-        `audio_recorder`, if given, is any object with a `save_recording()`
-        method — it's invoked when the conversation span ends so the file is on
-        disk before we read and attach it.
-        """
+        """Register the whole-conversation recording for the root span."""
         self.conversation_recordings[conversation_id] = recording_path
         if audio_recorder:
             self.conversation_recorders[conversation_id] = audio_recorder
@@ -106,15 +85,26 @@ class LangSmithSpanProcessor(SpanProcessor):
         self.downstream.on_start(span, parent_context)
 
     def on_end(self, span: ReadableSpan) -> None:
-        """Rewrite a Pipecat span into LangSmith's expected attribute shape."""
+        """Rewrite a Pipecat span into LangSmith's expected attribute shape.
+
+        KEY FIX: Pipecat ends spans before this processor runs, so
+        `span._attributes` is a frozen BoundedAttributes object. Any mutation
+        on it triggers OpenTelemetry's "Setting attribute on ended span"
+        warnings, which then surface as "Error during completion" errors in the
+        pipeline. We replace it with a plain mutable dict before any writes so
+        those warnings — and the downstream exceptions — never fire.
+        """
+        # Replace frozen BoundedAttributes with a plain mutable dict.
+        # This must happen before any attribute writes below.
+        if not isinstance(span._attributes, dict):
+            span._attributes = dict(span._attributes or {})
+
         trace_id = format(span.context.trace_id, "032x")
 
-        # Thread grouping (opt-in): LangSmith needs the thread_id on every run
-        # for thread-level filtering and token/cost aggregation. Never clobber
-        # an id set upstream.
+        # Thread grouping (opt-in)
         if (
             self.thread_id_provider is not None
-            and "langsmith.metadata.thread_id" not in span.attributes
+            and "langsmith.metadata.thread_id" not in span._attributes
         ):
             thread_id = self.thread_id_provider()
             if thread_id:
@@ -132,43 +122,16 @@ class LangSmithSpanProcessor(SpanProcessor):
             self._handle_turn(span)
         elif span.name == "conversation":
             self._handle_conversation(span, trace_id)
-        # Nested LangGraph/LangChain runs (the model node, its ChatOpenAI calls,
-        # tools/lookup_weather) need no rewriting — they arrive in LangSmith's
-        # native shape with their own run type. With the framework span now a
-        # `chain`, they form the clean llm-within-chain multi-call shape the
-        # Messages view reconstructs from, so the processor needs no knowledge of
-        # the graph's nodes. (A graph node that is traced but never spoken can opt
-        # out of the Messages view by setting `ls_message_view_exclude` metadata
-        # on itself in graph.py — keeping that concern out of this processor.)
 
         self.downstream.on_end(span)
 
     def _exclude_from_message_view(self, span: ReadableSpan) -> None:
-        """Drop a framework `stt`/`tts` span from the conversation Messages view.
-
-        That view reconstructs the chat from `llm`/`tool` runs (see
-        smith-go/runs/v2/messages). The framework span (named `llm`) is now a
-        `chain`, so the real inference runs nested under it — the model node and
-        its ChatOpenAI calls, plus the lookup_weather tool — form the clean
-        llm-within-chain multi-call shape LangSmith reconstructs reliably, and
-        they're left visible. `stt`/`tts` are tagged `llm`-kind for the trace
-        tree, but as conversation turns they'd inject fake "assistant" messages
-        (the raw transcript; "Generated audio for: …"), so we drop them here.
-
-        A nested graph node that is traced but never spoken can drop *itself*
-        from the Messages view by setting `ls_message_view_exclude` metadata in
-        graph.py, keeping graph knowledge out of this processor.
-
-        LangSmith honors the `ls_message_view_exclude` metadata key to drop a run
-        from the Messages view *only* — these runs stay fully visible in the
-        trace tree.
-        """
+        """Drop a framework stt/tts span from the LangSmith Messages view."""
         span._attributes["langsmith.metadata.ls_message_view_exclude"] = True
 
-    # -- per-span-type handlers ----------------------------------------------
+    # -- per-span-type handlers -----------------------------------------------
 
     def _handle_stt(self, span: ReadableSpan) -> None:
-        """STT span: audio input → transcribed text. Rendered like LiveKit's."""
         transcript = span.attributes.get("transcript", "")
         span._attributes["langsmith.span.kind"] = "llm"
         self._set_prompt_attributes(
@@ -180,33 +143,9 @@ class LangSmithSpanProcessor(SpanProcessor):
             )
 
     def _handle_llm(self, span: ReadableSpan, trace_id: str) -> None:
-        """Framework `llm` span: the LLM stage of the pipeline."""
         input_data = span.attributes.get("input", "")
         output_data = span.attributes.get("output", "")
 
-        # =====================================================================
-        # WHY WOULD A SPAN NAMED `llm` BE CLASSIFIED AS A `chain`?
-        #
-        # With our LangGraphLLMService, this span does NO inference itself —
-        # it only orchestrates the graph run. The real inference is the nested
-        # `model` runs (ChatOpenAI), which arrive in LangSmith's native shape
-        # with their own `llm` kind. Tagging the wrapper `llm` too would give
-        # LangSmith llm-inside-llm and double-count the conversation in the
-        # Messages view (which reconstructs the chat from llm/tool runs) — so
-        # the wrapper must be a `chain`. That's what this demo configures.
-        #
-        # With Pipecat's stock LLM services (e.g. plain OpenAILLMService), the
-        # opposite is true: this span IS the inference, nothing nests under
-        # it, and the default `llm` is the correct kind. IF YOU COPY THIS
-        # PROCESSOR INTO A STOCK-SERVICE PIPELINE, KEEP THE DEFAULT.
-        #
-        # This can't be auto-detected at span-end time: LangChain's runs are
-        # exported to OTel from LangSmith's background queue — with backdated
-        # timestamps, *after* this span has already ended — so the nested
-        # runs aren't visible yet when this handler fires. The code that
-        # builds the pipeline knows which LLM service it wired, so it states
-        # the choice explicitly via `llm_span_kind` at construction.
-        # =====================================================================
         span._attributes["langsmith.span.kind"] = self._llm_span_kind
 
         try:
@@ -219,9 +158,6 @@ class LangSmithSpanProcessor(SpanProcessor):
             if isinstance(m, dict)
         ]
 
-        # Singular-only JSON in LangChain message format ({"messages": [...]}).
-        # The indexed gen_ai.prompt.{n}.role/content form takes precedence at
-        # ingest and can only carry role/content — it would drop tool_calls.
         if messages:
             span._attributes["gen_ai.prompt"] = json.dumps({"messages": messages})
         if output_data:
@@ -229,8 +165,6 @@ class LangSmithSpanProcessor(SpanProcessor):
                 {"messages": [{"role": "assistant", "content": output_data}]}
             )
 
-        # Each request's input carries the full history, so the latest snapshot
-        # IS the conversation — kept per trace for the root span to render.
         transcript = [m for m in messages if m.get("role") != "system"]
         if output_data:
             transcript.append({"role": "assistant", "content": output_data})
@@ -238,8 +172,6 @@ class LangSmithSpanProcessor(SpanProcessor):
             self._conversation_by_trace[trace_id] = transcript
 
     def _handle_tts(self, span: ReadableSpan) -> None:
-        """TTS span: text → audio. Rendered like LiveKit's: the voice is
-        metadata, not conversation content."""
         text = span.attributes.get("text", "")
         span._attributes["langsmith.span.kind"] = "llm"
         voice_id = span.attributes.get("voice_id")
@@ -251,8 +183,6 @@ class LangSmithSpanProcessor(SpanProcessor):
         )
 
     def _handle_turn(self, span: ReadableSpan) -> None:
-        """Turn span: a framework wrapper around one exchange — a chain with no
-        fabricated I/O (the llm span beneath it carries the content)."""
         span._attributes["langsmith.span.kind"] = "chain"
         turn_number = span.attributes.get("turn.number")
         if turn_number is not None:
@@ -262,12 +192,6 @@ class LangSmithSpanProcessor(SpanProcessor):
             span._attributes["langsmith.metadata.turn_was_interrupted"] = was_interrupted
 
     def _handle_conversation(self, span: ReadableSpan, trace_id: str) -> None:
-        """Conversation span: the whole session; the LangSmith root.
-
-        Input = the opening message; output = everything after it (same split
-        as the LiveKit root). Pipecat's conversation span genuinely ends last,
-        so no deferral is needed.
-        """
         conversation_id = span.attributes.get("conversation.id", "") or span.attributes.get(
             "conversation_id", ""
         )
@@ -275,8 +199,6 @@ class LangSmithSpanProcessor(SpanProcessor):
         span._attributes["langsmith.root_span"] = True
         span._attributes["langsmith.metadata.ls_modality"] = "audio"
 
-        # Singular-only, like _handle_llm — the transcript can contain
-        # tool-call messages the indexed form can't represent.
         messages = self._conversation_by_trace.get(trace_id, [])
         if messages:
             span._attributes["gen_ai.prompt"] = json.dumps({"messages": messages[:1]})
@@ -295,7 +217,7 @@ class LangSmithSpanProcessor(SpanProcessor):
         if recorder is not None:
             try:
                 recorder.save_recording()
-            except Exception as e:  # pragma: no cover
+            except Exception as e:
                 logger.warning(f"Failed to save recording for {conversation_id}: {e}")
 
         path_str = self.conversation_recordings.get(conversation_id)
@@ -326,14 +248,7 @@ class LangSmithSpanProcessor(SpanProcessor):
 
     @staticmethod
     def _to_langchain_message(msg: dict) -> dict:
-        """Convert one OpenAI-format context message to LangChain flat format.
-
-        Assistant tool calls arrive as `{"id", "type": "function", "function":
-        {"name", "arguments": "<json string>"}}`; LangSmith renders tool-call
-        blocks from the flat `{"type": "tool_call", "id", "name", "args"
-        (object)}` shape, with tool-result messages linking back via top-level
-        `tool_call_id`.
-        """
+        """Convert one OpenAI-format context message to LangChain flat format."""
         content = msg.get("content")
         if not isinstance(content, str):
             content = "" if content is None else json.dumps(content)
@@ -382,7 +297,7 @@ class LangSmithSpanProcessor(SpanProcessor):
                 data = path.read_bytes()
                 if data:
                     return base64.b64encode(data).decode("utf-8")
-        except Exception as e:  # pragma: no cover
+        except Exception as e:
             logger.warning(f"Failed to load audio file {file_path}: {e}")
         return None
 
@@ -400,25 +315,38 @@ def setup_langsmith_tracing(
 ) -> LangSmithSpanProcessor:
     """Configure OTel export to LangSmith and register the span processor.
 
-    Pipecat's `setup_tracing` only creates and installs the TracerProvider
-    (`exporter=None` adds no export pipeline); the processor registered here
-    wraps the OTLP exporter itself, so spans are always rewritten before they
-    are queued for export. The exporter reads `OTEL_EXPORTER_OTLP_ENDPOINT` /
-    `OTEL_EXPORTER_OTLP_HEADERS` from the environment (wired by
-    `voice_demo.tracing.configure`). Returns the processor instance so the
-    agent can register its audio recorders on it.
-
-    `llm_span_kind` and `thread_id_provider` are forwarded to
-    `LangSmithSpanProcessor` — see its docstring.
+    Returns the processor instance so the agent can register audio recorders.
     """
     from pipecat.utils.tracing.setup import setup_tracing
+
+    api_key = os.environ.get("LANGSMITH_API_KEY", "")
+    project = os.environ.get("LANGSMITH_PROJECT", "default")
+    base_endpoint = os.environ.get(
+        "OTEL_EXPORTER_OTLP_ENDPOINT", "https://api.smith.langchain.com/otel"
+    )
+    # OTLPSpanExporter appends /v1/traces only when reading from env vars, not
+    # when the endpoint is passed as a constructor argument, so we add it here.
+    traces_endpoint = f"{base_endpoint.rstrip('/')}/v1/traces"
+
+    exporter = OTLPSpanExporter(
+        endpoint=traces_endpoint,
+        headers={
+            "x-api-key": api_key,
+            "Langchain-Project": project,
+        },
+    )
+    downstream = BatchSpanProcessor(exporter)
 
     setup_tracing(service_name="voice-demo-pipecat", exporter=None, console_export=False)
 
     span_processor = LangSmithSpanProcessor(
-        llm_span_kind=llm_span_kind, thread_id_provider=thread_id_provider
+        downstream_processor=downstream,
+        llm_span_kind=llm_span_kind,
+        thread_id_provider=thread_id_provider,
     )
     provider = trace.get_tracer_provider()
     if isinstance(provider, TracerProvider):
         provider.add_span_processor(span_processor)
+    else:
+        logger.warning("LangSmith tracing: TracerProvider not available, spans will not be exported.")
     return span_processor
