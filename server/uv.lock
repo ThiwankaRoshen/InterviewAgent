@@ -1996,6 +1996,7 @@ dependencies = [
     { name = "opentelemetry-exporter-otlp" },
     { name = "pipecat-ai", extra = ["deepgram", "runner", "webrtc"] },
     { name = "pipecatcloud" },
+    { name = "pydantic-settings" },
 ]
 
 [package.dev-dependencies]
@@ -2009,6 +2010,7 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp", specifier = ">=1.43.0" },
     { name = "pipecat-ai", extras = ["assemblyai", "deepgram", "openai", "runner", "silero", "webrtc"], specifier = ">=1.4.0" },
     { name = "pipecatcloud" },
+    { name = "pydantic-settings", specifier = ">=2.14.2" },
 ]
 
 [package.metadata.requires-dev]

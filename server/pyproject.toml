@@ -8,6 +8,7 @@ dependencies = [
     # "pipecat-ai[assemblyai,daily,deepgram,openai,runner,silero,webrtc]>=1.4.0",
     "pipecat-ai[assemblyai,deepgram,openai,runner,silero,webrtc]>=1.4.0",
     "pipecatcloud",
+    "pydantic-settings>=2.14.2",
 ]
 
 [dependency-groups]

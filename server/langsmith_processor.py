@@ -34,8 +34,7 @@ from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from dotenv import load_dotenv
-load_dotenv()
+from settings import settings
 
 class LangSmithSpanProcessor(SpanProcessor):
     """Enriches Pipecat's OTel spans with LangSmith-compatible attributes."""
@@ -319,11 +318,15 @@ def setup_langsmith_tracing(
     """
     from pipecat.utils.tracing.setup import setup_tracing
 
-    api_key = os.environ.get("LANGSMITH_API_KEY", "")
-    project = os.environ.get("LANGSMITH_PROJECT", "default")
-    base_endpoint = os.environ.get(
-        "OTEL_EXPORTER_OTLP_ENDPOINT", "https://api.smith.langchain.com/otel"
-    )
+    # api_key = os.environ.get("LANGSMITH_API_KEY", "")
+    api_key = settings.LANGSMITH_API_KEY
+    # project = os.environ.get("LANGSMITH_PROJECT", "default")
+    project = settings.LANGSMITH_PROJECT
+    # base_endpoint = os.environ.get(
+    #     "OTEL_EXPORTER_OTLP_ENDPOINT", "https://api.smith.langchain.com/otel"
+    # )
+    base_endpoint =settings.OTEL_EXPORTER_OTLP_ENDPOINT
+    
     # OTLPSpanExporter appends /v1/traces only when reading from env vars, not
     # when the endpoint is passed as a constructor argument, so we add it here.
     traces_endpoint = f"{base_endpoint.rstrip('/')}/v1/traces"
