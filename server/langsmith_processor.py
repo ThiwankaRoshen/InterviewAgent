@@ -335,7 +335,7 @@ def setup_langsmith_tracing(
         endpoint=traces_endpoint,
         headers={
             "x-api-key": api_key,
-            "Langchain-Project": project,
+            "Langsmith-Project": project,
         },
     )
     downstream = BatchSpanProcessor(exporter)
