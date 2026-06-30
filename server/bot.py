@@ -14,6 +14,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
+from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.assemblyai.stt import AssemblyAISTTService
@@ -34,6 +35,18 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     conversation_id = str(uuid.uuid4())
 
     tracing_processor = setup_langsmith_tracing()
+
+    recording_path = os.path.join(tempfile.gettempdir(), f"recording_{conversation_id}.wav")
+    audio_buffer = AudioBufferProcessor()
+    tracing_processor.register_recording(conversation_id, recording_path)
+
+    @audio_buffer.event_handler("on_audio_data")
+    async def on_audio_data(processor, audio, sample_rate, num_channels):
+        with wave.open(recording_path, "wb") as wf:
+            wf.setnchannels(num_channels)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(audio)
 
     stt = AssemblyAISTTService(
         api_key=os.getenv("ASSEMBLYAI_API_KEY")
@@ -80,6 +93,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
             user_aggregator,
             llm,
             tts,
+            audio_buffer,
             transport.output(),
             assistant_aggregator,
         ]
@@ -106,6 +120,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info("Client connected")
+        await audio_buffer.start_recording()
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
