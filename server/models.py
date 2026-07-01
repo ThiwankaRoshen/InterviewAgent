@@ -29,8 +29,8 @@ class Session(Base):
     cv_file_name: Mapped[str] = mapped_column(String(100), nullable=False)
     job_description: Mapped[str] = mapped_column(Text, nullable=False)
     company_info: Mapped[str] = mapped_column(Text, nullable=False)
-    additional_info: Mapped[str] = mapped_column(Text, nullable=False)
-    feedback: Mapped[str] = mapped_column(Text, nullable=False)
+    additional_info: Mapped[str] = mapped_column(Text, nullable=True, default="")
+    feedback: Mapped[str] = mapped_column(Text, nullable=True, default="")
     
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"),
