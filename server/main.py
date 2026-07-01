@@ -1,17 +1,17 @@
-from contextlib import asynccontextmanager 
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.exception_handlers import (
     http_exception_handler,
-    request_validation_exception_handler
+    request_validation_exception_handler,
 )
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from starlette.exceptions import HTTPException as StartletteHttpException  
+from starlette.exceptions import HTTPException as StartletteHttpException
 from database import Base, engine
 from routers import users, practices, sessions
-
 
 
 @asynccontextmanager
@@ -20,20 +20,29 @@ async def lifesapn(_app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     yield
     await engine.dispose()
-    
+
 
 app = FastAPI(lifespan=lifesapn)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.mount("/media", StaticFiles(directory="media"), name="media")
 templates = Jinja2Templates(directory="templates")
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(sessions.router, prefix="/api/sessions", tags=["Sesstions"])
-app.include_router(practices.router, prefix="/api/practices", tags=["Practice Sessions"])
+app.include_router(
+    practices.router, prefix="/api/practices", tags=["Practice Sessions"]
+)
 
 
 @app.get("/health", include_in_schema=False)
 async def health_check():
     return {"status": "ok"}
+
 
 @app.exception_handler(StartletteHttpException)
 async def general_http_exception_handler(

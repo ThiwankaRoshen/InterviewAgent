@@ -29,15 +29,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 from langsmith_processor import setup_langsmith_tracing
-from bot_utils import close_and_persist_interview_stage, initialize_active_session_state, make_interview_tools, generate_system_prompt
-from server.database import AsyncSessionLocal
+from bot_utils import (
+    close_and_persist_interview_stage,
+    initialize_active_session_state,
+    make_interview_tools,
+    generate_system_prompt,
+)
+from database import AsyncSessionLocal
+
 load_dotenv(override=True)
 
 
-async def run_bot(transport: BaseTransport, 
-                  stage_id: int, 
-                  practice_stage_id: int, 
-                  db: AsyncSession) -> None:
+async def run_bot(
+    transport: BaseTransport, stage_id: int, practice_stage_id: int, db: AsyncSession
+) -> None:
     """Run the voice bot for this session."""
     logger.info("Starting bot")
 
@@ -47,7 +52,9 @@ async def run_bot(transport: BaseTransport,
         thread_id_provider=lambda: conversation_id,
     )
 
-    recording_path = os.path.join(tempfile.gettempdir(), f"recording_{conversation_id}.wav")
+    recording_path = os.path.join(
+        tempfile.gettempdir(), f"recording_{conversation_id}.wav"
+    )
     audio_buffer = AudioBufferProcessor(num_channels=2)
     tracing_processor.register_recording(conversation_id, recording_path)
 
@@ -59,9 +66,7 @@ async def run_bot(transport: BaseTransport,
             wf.setframerate(sample_rate)
             wf.writeframes(audio)
 
-    stt = AssemblyAISTTService(
-        api_key=os.getenv("ASSEMBLYAI_API_KEY")
-    )
+    stt = AssemblyAISTTService(api_key=os.getenv("ASSEMBLYAI_API_KEY"))
     tts = DeepgramTTSService(
         settings=DeepgramTTSService.Settings(
             voice=os.getenv("DEEPGRAM_VOICE", "aura-2-thalia-en"),
@@ -75,10 +80,12 @@ async def run_bot(transport: BaseTransport,
         api_key=os.getenv("GITHUB_TOKEN"),
         base_url="https://models.github.ai/inference",
     )
-    system_prompt = await generate_system_prompt(stage_id, db)          # FIX: await it
-    active_session = await initialize_active_session_state(stage_id, practice_stage_id, db)
+    system_prompt = await generate_system_prompt(stage_id, db)  # FIX: await it
+    active_session = await initialize_active_session_state(
+        stage_id, practice_stage_id, db
+    )
     tools_schema, handlers = make_interview_tools(active_session)
-    
+
     for name, handler in handlers.items():
         llm.register_function(name, handler)
 
@@ -86,7 +93,7 @@ async def run_bot(transport: BaseTransport,
         messages=[{"role": "system", "content": system_prompt}],
         tools=tools_schema,
     )
-    
+
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
@@ -136,7 +143,7 @@ async def run_bot(transport: BaseTransport,
         await audio_buffer.stop_recording()
         await worker.cancel()
         await asyncio.sleep(5)  # Simple delay for trace export
-        await close_and_persist_interview_stage(active_session, db)   
+        await close_and_persist_interview_stage(active_session, db)
 
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)

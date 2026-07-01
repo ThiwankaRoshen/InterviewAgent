@@ -1,5 +1,7 @@
 FROM dailyco/pipecat-base:latest
 
+# uv run python -c "import nltk; nltk.download('stopwords')"
+
 # Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
 

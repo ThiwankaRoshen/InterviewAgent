@@ -2,15 +2,22 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from schemas import SessionResponse, UserUpdate, UserCreate, UserPrivate, UserPublic, Token
+from schemas import (
+    SessionResponse,
+    UserUpdate,
+    UserCreate,
+    UserPrivate,
+    UserPublic,
+    Token,
+)
 import models
 
 from datetime import timedelta
 from fastapi.security import OAuth2PasswordRequestForm
 from auth import CurrentUser, create_access_token, hash_password, verify_password
 from database import DBSession
-from server.crud import get_user_cvs
-from server.cv_utils import delete_cv_file
+from crud import get_user_cvs
+from cv_utils import delete_cv_file
 from settings import settings
 
 router = APIRouter()
@@ -19,9 +26,7 @@ router = APIRouter()
 @router.post("", response_model=UserPrivate, status_code=status.HTTP_201_CREATED)
 async def create_user(user: UserCreate, db: DBSession):
     result = await db.execute(
-        select(models.User).where(
-            func.lower(models.User.email) == user.email.lower()
-        )
+        select(models.User).where(func.lower(models.User.email) == user.email.lower())
     )
     existing_user = result.scalars().first()
     if existing_user:
@@ -87,20 +92,24 @@ async def update_user_patch(
         )
     if user.email and existing_user.email != user.email.lower():
         result = (
+            (
                 await db.execute(
                     select(models.User).where(
                         func.lower(models.User.email) == user.email.lower(),
                         models.User.id != user_id,
                     )
                 )
-            ).scalars().first()
-        
+            )
+            .scalars()
+            .first()
+        )
+
         if result:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A User Exist with this email.",
             )
- 
+
     if user.email is not None:
         existing_user.email = user.email
 
@@ -122,14 +131,15 @@ async def delete_user(user_id: int, current_user: CurrentUser, db: DBSession):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not Exist.",
-        ) 
-        
+        )
+
     cv_paths = await get_user_cvs(db, user_id)
     for cv_path in cv_paths:
         delete_cv_file(cv_path)
 
     await db.delete(existing_user)
     await db.commit()
+
 
 @router.get("/{user_id}", response_model=UserPublic)
 async def get_user(user_id: int, db: DBSession):
