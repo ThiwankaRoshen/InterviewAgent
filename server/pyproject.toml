@@ -9,6 +9,20 @@ dependencies = [
     "pipecat-ai[assemblyai,deepgram,openai,runner,silero,webrtc]>=1.4.0",
     "pipecatcloud",
     "pydantic-settings>=2.14.2",
+    "aiosqlite>=0.22.1",
+    "fastapi[standard]>=0.138.1",
+    "greenlet>=3.5.3",
+    "pillow>=12.2.0",
+    "pwdlib[argon2]>=0.3.0",
+    "pydantic-settings>=2.14.2",
+    "pyjwt>=2.13.0",
+    "sqlalchemy>=2.0.51",
+    "langsmith>=0.9.4",
+    "orjson>=3.11.9",
+    "requests-toolbelt>=1.0.0",
+    "uuid-utils>=0.16.2",
+    "xxhash>=3.8.0",
+    "zstandard>=0.25.0",
 ]
 
 [dependency-groups]
