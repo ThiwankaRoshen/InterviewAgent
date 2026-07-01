@@ -24,12 +24,20 @@ from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.workers.runner import WorkerRunner
 
+from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
 from langsmith_processor import setup_langsmith_tracing
-from mock_bot_utils import MockStage, MOCK_QUESTIONS, ActiveInterviewState, make_interview_tools, generate_system_prompt_mock
+from bot_utils import close_and_persist_interview_stage, initialize_active_session_state, make_interview_tools, generate_system_prompt
+from server.database import AsyncSessionLocal
 load_dotenv(override=True)
 
 
-async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
+async def run_bot(transport: BaseTransport, 
+                  stage_id: int, 
+                  practice_stage_id: int, 
+                  db: AsyncSession) -> None:
     """Run the voice bot for this session."""
     logger.info("Starting bot")
 
@@ -67,12 +75,10 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         api_key=os.getenv("GITHUB_TOKEN"),
         base_url="https://models.github.ai/inference",
     )
-
-    stage = MockStage()  # hardcoded fixture instead of a DB fetch
-    active_session = ActiveInterviewState(practice_stage_id=999, questions=MOCK_QUESTIONS)
+    system_prompt = await generate_system_prompt(stage_id, db)          # FIX: await it
+    active_session = await initialize_active_session_state(stage_id, practice_stage_id, db)
     tools_schema, handlers = make_interview_tools(active_session)
-    system_prompt = generate_system_prompt_mock(stage)
-
+    
     for name, handler in handlers.items():
         llm.register_function(name, handler)
 
@@ -130,6 +136,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         await audio_buffer.stop_recording()
         await worker.cancel()
         await asyncio.sleep(5)  # Simple delay for trace export
+        await close_and_persist_interview_stage(active_session, db)   
 
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
@@ -149,7 +156,23 @@ async def bot(runner_args: RunnerArguments):
     await run_bot(transport, runner_args)
 
 
-if __name__ == "__main__":
-    from pipecat.runner.run import main
+async def run_bot_entrypoint(webrtc_connection, stage_id: int, practice_stage_id: int):
+    """Entry point called from the FastAPI endpoint. Owns its own DB session
+    for the full lifetime of the call — separate from the request's session."""
+    transport = SmallWebRTCTransport(
+        webrtc_connection=webrtc_connection,
+        params=TransportParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            vad_analyzer=SileroVADAnalyzer(),
+        ),
+    )
 
-    main()
+    async with AsyncSessionLocal() as db:  # fresh session, lives as long as the call
+        await run_bot(transport, stage_id, practice_stage_id, db)
+
+
+# if __name__ == "__main__":
+#     from pipecat.runner.run import main
+
+#     main()
