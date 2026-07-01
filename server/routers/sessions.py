@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, File, HTTPException, UploadFile, status, Depends
+from questionary import Form
 from auth import CurrentUser
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,28 +10,51 @@ from services import create_interview_session_service, mock_ai_generation_engine
 
 router = APIRouter()
 
-
 @router.post(
-    "/sessions",
+    "",
     response_model=schemas.SessionResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_interview_session(
-    session_input: schemas.SessionCreate, current_user: CurrentUser, db: DBSession
+    current_user: CurrentUser ,
+    db: DBSession ,
+    cv: UploadFile = File(...),
+    job_description: str = Form(...),
+    company_info: str = Form(...),
+    additional_info: str = Form(...),
+    
 ):
+    session_input = schemas.SessionCreate(
+        job_description=job_description,
+        company_info=company_info,
+        additional_info=additional_info,
+    )
 
     new_session = await crud.create_session(
-        db=db, session_data=session_input, user_id=current_user.id
+        db=db,
+        session_data=session_input,
+        cv=cv,
+        user_id=current_user.id,
     )
+
     return new_session
+
+@router.get(
+    "",
+    response_model=list[schemas.SessionResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def list_user_sessions(current_user: CurrentUser, db: DBSession):
+    sessions = await crud.get_user_sessions(db=db, user_id=current_user.id)
+    return sessions
 
 
 @router.get(
-    "/sessions/{session_id}",
+    "/{session_id}",
     response_model=schemas.SessionResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_200_OK,
 )
-async def create_interview_session(
+async def get_interview_session(
     session_id: int, current_user: CurrentUser, db: DBSession
 ):
 
@@ -84,13 +108,11 @@ async def generate_interview_plan(
 
 
 @router.get(
-    "/sessions/{session_id}/stages",
+    "/{session_id}/stages",
     response_model=schemas.InterviewPlanResponse,
     status_code=status.HTTP_200_OK,
 )
-async def get_interview_plan(
-    session_id: int, current_user: CurrentUser, db: DBSession
-):
+async def get_interview_plan(session_id: int, current_user: CurrentUser, db: DBSession):
     session = await crud.get_session(db=db, session_id=session_id)
     if not session:
         raise HTTPException(
@@ -109,15 +131,13 @@ async def get_interview_plan(
 
 
 @router.post(
-    "/sessions/{session_id}/practice",
+    "/{session_id}/practice",
     response_model=schemas.StartPracticeResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Initialize DB session tracking data and fetch real-time Pipecat parameters",
 )
 async def start_practice_session(
-    session_id: int,
-    payload: schemas.StartPracticeRequest,
-    db: DBSession
+    session_id: int, payload: schemas.StartPracticeRequest, db: DBSession
 ):
     """
     Called by the Web UI. It builds the row identifiers for this attempt, fetches
@@ -149,7 +169,7 @@ async def start_practice_session(
 
 
 @router.patch(
-    "/sessions/{session_id}/feedback",
+    "/{session_id}/feedback",
     response_model=schemas.SessionEvaluationResponse,
     status_code=status.HTTP_200_OK,
     summary="Submit wrap-up feedback to initiate Version 2 structural shifts",

@@ -1,7 +1,9 @@
 import './App.css'
 import { AuthenticatedState } from './components/AuthenticatedState'
 import { AuthForm } from './components/AuthForm'
+import { SessionsPage } from './components/SessionsPage.tsx'
 import { useAuth } from './hooks/useAuth'
+import { getStoredSession } from './services/authService'
 
 function App() {
   const {
@@ -20,6 +22,8 @@ function App() {
     handleLogout,
   } = useAuth()
 
+  const token = getStoredSession().token
+
   return (
     <main className="auth-page">
       <section className="auth-card">
@@ -36,7 +40,10 @@ function App() {
         {message ? <div className={`feedback ${feedbackType}`}>{message}</div> : null}
 
         {isAuthenticated ? (
-          <AuthenticatedState userEmail={userEmail} onLogout={handleLogout} />
+          <>
+            <AuthenticatedState userEmail={userEmail} onLogout={handleLogout} />
+            <SessionsPage token={token} />
+          </>
         ) : (
           <AuthForm
             mode={mode}

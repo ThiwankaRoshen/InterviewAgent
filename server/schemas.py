@@ -26,7 +26,6 @@ class Token(BaseModel):
 
 
 class SessionCreate(BaseModel): 
-    cv: UploadFile = Field(..., description="The CV file to be uploaded")
     job_description: str = Field(..., description="The target job description text")
     company_info: str = Field(..., description="Information about the target company")
     additional_info: str = Field(..., description="Past interview sessions context, rumors, or extra details")

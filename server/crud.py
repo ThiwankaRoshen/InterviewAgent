@@ -1,4 +1,5 @@
 from datetime import datetime, UTC
+from fastapi import UploadFile
 from sqlalchemy import func, select
 import models
 import schemas
@@ -37,10 +38,13 @@ async def get_user_cvs(db: AsyncSession, user_id: int) -> list[str]:
 
 
 async def create_session(
-    db: AsyncSession, session_data: schemas.SessionCreate, user_id: int
+    cv: UploadFile,
+    db: AsyncSession, 
+    session_data: schemas.SessionCreate,
+    user_id: int
 ) -> models.Session:
 
-    cv_file_name = save_cv_file(session_data.cv)
+    cv_file_name = save_cv_file(cv)
 
     session = models.Session(
         cv_file_name=cv_file_name,
