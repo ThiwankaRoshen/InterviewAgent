@@ -2,6 +2,7 @@ import os
 import tempfile
 import uuid
 import wave
+import asyncio
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -128,6 +129,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         logger.info("Client disconnected")
         await audio_buffer.stop_recording()
         await worker.cancel()
+        await asyncio.sleep(5)  # Simple delay for trace export
 
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
