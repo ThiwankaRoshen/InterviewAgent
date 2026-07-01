@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import models
 from database import DBSession, get_db
 from server import crud, schemas
-from server.services import mock_ai_generation_engine
+from server.services import create_interview_session_service, mock_ai_generation_engine
 
 router = APIRouter()
 
@@ -70,6 +70,7 @@ async def generate_interview_plan(
     session = await db.execute(
         select(models.Session).where(models.Session.id == session_id)
     )
+    session = session.scalar_one_or_none()
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -81,10 +82,7 @@ async def generate_interview_plan(
             detail="You do not have permission to generate a plan for this session."
         )
 
-    generated_blueprint = mock_ai_generation_engine(
-        job_description=session.job_description,
-        company_info=session.company_info
-    )
+    generated_blueprint = await create_interview_session_service(session)
     
     saved_stages = await crud.create_interview_stages(
         db=db, 

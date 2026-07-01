@@ -1,10 +1,18 @@
 import json
 import schemas
+import asyncio
+import os
+from typing import List
+from langchain_openai import ChatOpenAI
+
+from server import models
+from server.cv_parser import parse_using_pyresparser
+from server.interview_gen import InterviewOrchestrator, InterviewPlan, StageGeneration
 
 
 
 
-def mock_ai_generation_engine(job_description: str, company_info: str) -> list[schemas.StageBase]:
+def mock_ai_generation_engine(session: models.Session) -> list[schemas.StageBase]:
     """
     Simulates AI pipeline parsing user metadata to cook up a tailored roadmap.
     """
@@ -23,18 +31,49 @@ def mock_ai_generation_engine(job_description: str, company_info: str) -> list[s
         schemas.StageBase(
             stage_order=1,
             stage_name="Behavioral Alignment",
-            stage_description=f"Assessing cultural fit and soft skills for roles matching: {job_description[:30]}...",
+            stage_description=f"Assessing cultural fit and soft skills for roles matching: {session.job_description[:30]}...",
             interviewer_persona="A warm but deeply analytical HR Manager who values team cohesion and growth mindset.",
             questions_and_answers=json.dumps(behavioral_qa)
         ),
         schemas.StageBase(
             stage_order=2,
             stage_name="Technical Core Evaluation",
-            stage_description=f"Deep dive into software engineering foundations targeted for {company_info[:30]}...",
+            stage_description=f"Deep dive into software engineering foundations targeted for {session.company_info[:30]}...",
             interviewer_persona="A pragmatic, senior tech lead who dislikes buzzwords and values clean architecture and system safety.",
             questions_and_answers=json.dumps(technical_qa)
         )
     ]
     
     
+    
+
+async def create_interview_session_service(session: models.Session) -> List[schemas.StageBase]:
+    # 1. Instantiate basic LangChain OpenAI model wrappers.
+    # Using 'gpt-4o-mini' for fast reasoning or 'gpt-4o' for ultra-complex profiles.
+    base_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+    
+    # 2. Bind structured output formats natively using LangChain
+    planner_llm = base_llm.with_structured_output(InterviewPlan)
+    stage_llm = base_llm.with_structured_output(StageGeneration)
+    
+    # 3. Supply to the Orchestrator
+    orchestrator = InterviewOrchestrator(planner_llm=planner_llm, stage_llm=stage_llm)
+     
+    cv_content = parse_using_pyresparser(session.cv_file_path)
+    
+    jd = session.job_description
+    
+    company_description = session.company_info
+    additional_info = session.additional_info
+    
+    # 4. Trigger Orchestration Pipeline
+    pipeline_result = await orchestrator.run_pipeline(
+        cv_text=cv_content,
+        jd_text=jd,
+        company_info=company_description,
+        additional_notes=additional_info
+    )
+    
+    return pipeline_result
+
 
