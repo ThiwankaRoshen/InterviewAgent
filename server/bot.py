@@ -24,7 +24,7 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.workers.runner import WorkerRunner
 
 from langsmith_processor import setup_langsmith_tracing
-
+from mock_bot_utils import MockStage, MOCK_QUESTIONS, ActiveInterviewState, make_interview_tools, generate_system_prompt_mock
 load_dotenv(override=True)
 
 
@@ -67,20 +67,19 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         base_url="https://models.github.ai/inference",
     )
 
+    stage = MockStage()  # hardcoded fixture instead of a DB fetch
+    active_session = ActiveInterviewState(practice_stage_id=999, questions=MOCK_QUESTIONS)
+    tools_schema, handlers = make_interview_tools(active_session)
+    system_prompt = generate_system_prompt_mock(stage)
+
+    for name, handler in handlers.items():
+        llm.register_function(name, handler)
+
     context = LLMContext(
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a helpful assistant in a voice conversation. "
-                    "Your responses will be spoken aloud, so avoid emojis, "
-                    "bullet points, or other formatting that can't be spoken. "
-                    "Respond to what the user said in a creative, helpful, "
-                    "and brief way."
-                ),
-            }
-        ]
+        messages=[{"role": "system", "content": system_prompt}],
+        tools=tools_schema,
     )
+    
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(

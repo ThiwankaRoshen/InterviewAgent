@@ -2,6 +2,8 @@ import json
 import schemas
 
 
+
+
 def mock_ai_generation_engine(job_description: str, company_info: str) -> list[schemas.StageBase]:
     """
     Simulates AI pipeline parsing user metadata to cook up a tailored roadmap.
@@ -33,3 +35,6 @@ def mock_ai_generation_engine(job_description: str, company_info: str) -> list[s
             questions_and_answers=json.dumps(technical_qa)
         )
     ]
+    
+    
+
