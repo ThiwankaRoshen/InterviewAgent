@@ -1,16 +1,16 @@
 from typing import Annotated
-from fastapi import APIRouter, HTTPException, status, Depends, UploadFile
-from schemas import PostResponse, UserUpdate
+from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
-from schemas import PostResponse, UserCreate, UserPrivate, UserPublic, Token
+from schemas import SessionResponse, UserUpdate, UserCreate, UserPrivate, UserPublic, Token
 import models
-from database import DBSession, get_db
 
 from datetime import timedelta
 from fastapi.security import OAuth2PasswordRequestForm
 from auth import CurrentUser, create_access_token, hash_password, verify_password
+from database import DBSession
+from server.crud import get_user_cvs
+from server.cv_utils import delete_cv_file
 from settings import settings
 
 router = APIRouter()
@@ -20,17 +20,8 @@ router = APIRouter()
 async def create_user(user: UserCreate, db: DBSession):
     result = await db.execute(
         select(models.User).where(
-            func.lower(models.User.username) == user.username.lower()
+            func.lower(models.User.email) == user.email.lower()
         )
-    )
-    existing_user = result.scalars().first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A User Exist with this username.",
-        )
-    result = await db.execute(
-        select(models.User).where(func.lower(models.User.email) == user.email.lower())
     )
     existing_user = result.scalars().first()
     if existing_user:
@@ -39,7 +30,6 @@ async def create_user(user: UserCreate, db: DBSession):
             detail="A User Exist with this email.",
         )
     new_user = models.User(
-        username=user.username,
         email=user.email.lower(),
         password_hash=hash_password(user.password),
     )
@@ -64,7 +54,7 @@ async def login_for_access_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect Email or Password.",
         )
-    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": str(user.id)}, expires_delta=access_token_expires
     )
@@ -95,38 +85,22 @@ async def update_user_patch(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not Exist.",
         )
-    if user.username and existing_user.username.lower() != user.username.lower():
-        result = await db.execute(
-            select(models.User).where(
-                func.lower(models.User.username) == user.username.lower(),
-                models.User.id != user_id,
-            )
-        )
-        result = result.scalars().first()
-        if result:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A User Exist with this username.",
-            )
     if user.email and existing_user.email != user.email.lower():
         result = (
-            await db.execute(
-                select(models.User).where(
-                    func.lower(models.User.email) == user.email.lower(),
-                    models.User.id != user_id,
+                await db.execute(
+                    select(models.User).where(
+                        func.lower(models.User.email) == user.email.lower(),
+                        models.User.id != user_id,
+                    )
                 )
-            )
-            .scalars()
-            .first()
-        )
+            ).scalars().first()
+        
         if result:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A User Exist with this email.",
             )
-
-    if user.username is not None:
-        existing_user.username = user.username
+ 
     if user.email is not None:
         existing_user.email = user.email
 
@@ -148,13 +122,14 @@ async def delete_user(user_id: int, current_user: CurrentUser, db: DBSession):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not Exist.",
-        )
-    profile_picture_filename = existing_user.image_file
+        ) 
+        
+    cv_paths = await get_user_cvs(db, user_id)
+    for cv_path in cv_paths:
+        delete_cv_file(cv_path)
+
     await db.delete(existing_user)
     await db.commit()
-    if profile_picture_filename:
-        delete_profile_image(profile_picture_filename)
-
 
 @router.get("/{user_id}", response_model=UserPublic)
 async def get_user(user_id: int, db: DBSession):
@@ -167,19 +142,7 @@ async def get_user(user_id: int, db: DBSession):
     return user
 
 
-@router.get("/{user_id}/posts", response_model=list[PostResponse])
-async def get_user_posts(user_id: int, db: DBSession):
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
-    user = result.scalars().first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User Doesn't Exist."
-        )
-    result = await db.execute(
-        select(models.Post)
-        .options(selectinload(models.Post.author))
-        .where(models.Post.user_id == user.id)
-        .order_by(models.Post.date_posted.desc())
-    )
-    posts = result.scalars().all()
-    return posts
+@router.get("/{user_id}/sessions", response_model=list[SessionResponse])
+async def get_user_sessions(user_id: int, db: DBSession):
+    results = await get_user_sessions(db, user_id)
+    return results

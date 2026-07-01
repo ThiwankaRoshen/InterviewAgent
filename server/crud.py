@@ -1,17 +1,40 @@
-from sqlalchemy import select
-
+from datetime import datetime, UTC
+from sqlalchemy import func, select
 import models  
 import schemas
 from server.cv_utils import save_cv_file
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
- 
+
+
 async def get_session(db: AsyncSession, session_id: int) -> models.Session:
     session = await db.execute(
         select(models.Session)
         .where(models.Session.id == session_id)
     ) 
     
+    session = session.scalars().first()
+    
     return session
+
+async def get_user_sessions(db: AsyncSession, user_id: int) -> list[models.Session]:
+    results = await db.execute(
+        select(models.Session)
+        .where(models.Session.user_id == user_id)
+    ) 
+    results = results.scalars().all()
+     
+    return results
+
+async def get_user_cvs(db: AsyncSession, user_id: int) -> list[str]:
+    results = await db.execute(
+        select(models.Session)
+        .where(models.Session.user_id == user_id)
+    ) 
+    results = results.scalars().all()
+    
+    cv_paths = [result.cv_file_path for result in results.scalars().all()]
+    
+    return cv_paths
 
 async def create_session(
     db: AsyncSession, 
@@ -42,10 +65,10 @@ async def create_interview_stages(
     session_id: int, 
     generated_stages: list[schemas.StageBase]
 ) -> list[models.Stage]:
-    db_stages = []
+    stages = []
     
     for stage_data in generated_stages:
-        db_stage = models.Stage(
+        stage = models.Stage(
             stage_order=stage_data.stage_order,
             stage_name=stage_data.stage_name,
             stage_description=stage_data.stage_description,
@@ -53,15 +76,15 @@ async def create_interview_stages(
             questions_and_answers=stage_data.questions_and_answers,
             session_id=session_id
         )
-        db.add(db_stage)
-        db_stages.append(db_stage)
+        db.add(stage)
+        stages.append(stage)
     
     await db.commit()
     
-    for stage in db_stages:
+    for stage in stages:
         await db.refresh(stage)
         
-    return db_stages
+    return stages
 
 async def get_interview_stages(
     db: AsyncSession, 
@@ -101,24 +124,24 @@ def initialize_practice_run(
     Creates both the active run tracking metadata rows in one transaction.
     """
     # 1. Start the root Practice Session
-    db_practice_session = models.PracticeSession(
+    practice_session = models.PracticeSession(
         session_id=session_id,
         created_at=datetime.now(UTC)
     )
-    db.add(db_practice_session)
+    db.add(practice_session)
     db.flush()  # Flushes to get db_practice_session.id before committing
 
     # 2. Start the tracking wrapper for this stage run
-    db_practice_stage = models.PracticeStage(
-        practice_session_id=db_practice_session.id
+    practice_stage = models.PracticeStage(
+        practice_session_id=practice_session.id
     )
-    db.add(db_practice_stage)
+    db.add(practice_stage)
     
     db.commit()
-    db.refresh(db_practice_session)
-    db.refresh(db_practice_stage)
+    db.refresh(practice_session)
+    db.refresh(practice_stage)
     
-    return db_practice_session, db_practice_stage
+    return practice_session, practice_stage
 
 
 def record_live_answer(
@@ -128,21 +151,21 @@ def record_live_answer(
     """
     Invoked dynamically when Pipecat triggers an update tool callback after processing an exchange.
     """
-    db_answer = models.Answer(
+    answer = models.Answer(
         practice_stage_id=practice_stage_id,
         question_order=answer_data.question_order,
         question_text=answer_data.question_text,
         behaviour=answer_data.behaviour,
         answer_text=answer_data.answer_text
     )
-    db.add(db_answer)
+    db.add(answer)
     db.commit()
-    db.refresh(db_answer)
-    return db_answer
+    db.refresh(answer)
+    return answer
 
 
 
-def update_session_feedback(
+async def update_session_feedback(
     db: AsyncSession, 
     session_id: int, 
     feedback_data: schemas.SessionFeedbackUpdate
@@ -150,21 +173,32 @@ def update_session_feedback(
     """
     Saves the iteration instructions into the parent session row.
     """
-    db_session = db.query(models.Session).filter(models.Session.id == session_id).first()
-    if not db_session:
+    session = await db.execute(
+        select(models.Session)
+        .where(models.Session.id == session_id)
+        )
+    
+    session= session.scalars().first()
+    if not session:
         return None
         
-    db_session.feedback = feedback_data.feedback
+    session.feedback = feedback_data.feedback
     
     db.commit()
-    db.refresh(db_session)
-    return db_session
+    db.refresh(session)
+    return session
 
 
-def get_practice_runs_count(db: AsyncSession, session_id: int) -> int:
+async def get_practice_runs_count(
+    db: AsyncSession,
+    session_id: int,
+) -> int:
     """
-    Helper to count previous attempts to see structural history progress.
+    Count previous practice runs for an interview session.
     """
-    return db.query(func.count(models.PracticeSession.id)).filter(
+    stmt = select(func.count(models.PracticeSession.id)).where(
         models.PracticeSession.session_id == session_id
-    ).scalar() or 0
+    )
+
+    result = await db.execute(stmt)
+    return result.scalar_one()

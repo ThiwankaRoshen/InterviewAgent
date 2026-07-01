@@ -1,11 +1,7 @@
-from typing import Annotated
 from fastapi import APIRouter, HTTPException, status, Depends
-from auth import CurrentUser
-from schemas import PostCreate, PostResponse
+from auth import CurrentUser 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
-from schemas import PostCreate, PostResponse, PostUpdate
+from sqlalchemy.ext.asyncio import AsyncSession 
 import models
 from database import DBSession, get_db
 from server import crud, schemas
@@ -18,37 +14,32 @@ router = APIRouter()
     response_model=schemas.SessionResponse, 
     status_code=status.HTTP_201_CREATED, 
 )
-def create_interview_session(
+async def create_interview_session(
     session_input: schemas.SessionCreate, 
     current_user: CurrentUser,
     db: DBSession
 ): 
     
-    try:
-        new_session = crud.create_session(
-            db=db, 
-            session_data=session_input, 
-            user_id=current_user.id
-        )
-        return new_session
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to record session setup: {str(e)}"
-        )
+    new_session = await crud.create_session(
+        db=db, 
+        session_data=session_input, 
+        user_id=current_user.id
+    )
+    return new_session 
         
+
 @router.get(
     "/sessions/{session_id}", 
     response_model=schemas.SessionResponse, 
     status_code=status.HTTP_201_CREATED, 
 )
-def create_interview_session(
+async def create_interview_session(
     session_id: int, 
     current_user: CurrentUser,
     db: DBSession
 ): 
 
-    session = crud.get_session(
+    session = await crud.get_session(
         db=db, 
         session_id=session_id,  
     )
@@ -116,9 +107,7 @@ async def get_interview_plan(
     current_user: CurrentUser,
     db: AsyncSession
 ): 
-    session = await db.execute(
-        select(models.Session).where(models.Session.id == session_id)
-    )
+    session = await crud.get_session(db=db, session_id=session_id)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -145,51 +134,40 @@ async def get_interview_plan(
     status_code=status.HTTP_201_CREATED,
     summary="Initialize DB session tracking data and fetch real-time Pipecat parameters"
 )
-def start_practice_session(session_id: int, payload: schemas.StartPracticeRequest, db: DBSession = Depends(get_db)):
+async def start_practice_session(
+    session_id: int,
+    payload: schemas.StartPracticeRequest,
+    db: DBSession = Depends(get_db)):
     """
     Called by the Web UI. It builds the row identifiers for this attempt, fetches
     the context to hand off to Pipecat, and returns the room tokens to the frontend client.
-    """
-    # 1. Confirm session template and parent stages exist
-    stage = db.query(models.Stage).filter(models.Stage.id == payload.stage_id, models.Stage.session_id == session_id).first()
+    """ 
+    stage = await db.execute(
+        select(models.Stage)
+        .where(models.Stage.id == payload.stage_id, models.Stage.session_id == session_id)
+        )
+    stage = stage.scalar_one()
     if not stage:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Specified stage configuration mapping does not match this interview blueprint."
         )
 
-    try:
-        # 2. Track the physical instantiation row instances
-        p_session, p_stage = crud.initialize_practice_run(db, session_id=session_id)
+    p_session, p_stage = crud.initialize_practice_run(db, session_id=session_id)
         
-        # 3. Connect to Pipecat deployment orchestration layer here
-        # (Mocking room tokens provided by Daily.co/WebRTC infrastructures used by Pipecat pipelines)
-        mock_room_url = f"https://your-app.daily.co/interview-room-{p_stage.id}"
-        mock_token = f"jwt-token-for-stage-{p_stage.id}"
+    mock_room_url = f"https://your-app.daily.co/interview-room-{p_stage.id}"
+    mock_token = f"jwt-token-for-stage-{p_stage.id}"
         
-        # Note: At this point, you typically trigger/spin up your Pipecat process 
-        # passing `stage.interviewer_persona`, `stage.questions_and_answers`, and `p_stage.id`
-        
-        return schemas.StartPracticeResponse(
-            practice_session_id=p_session.id,
-            practice_stage_id=p_stage.id,
-            room_url=mock_room_url,
-            token=mock_token
-        )
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-from fastapi import FastAPI, Depends, HTTPException, status
-from sqlalchemy.orm import Session as DBSession
-
-import crud
-import schemas
-from database import get_db
-
-app = FastAPI(title="Interview Prep AI Engine")
+    return schemas.StartPracticeResponse(
+        practice_session_id=p_session.id,
+        practice_stage_id=p_stage.id,
+        room_url=mock_room_url,
+        token=mock_token
+    ) 
 
 
-@app.patch(
+
+@router.patch(
     "/sessions/{session_id}/feedback", 
     response_model=schemas.SessionEvaluationResponse,
     status_code=status.HTTP_200_OK,

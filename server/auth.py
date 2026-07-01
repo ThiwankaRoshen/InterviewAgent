@@ -5,11 +5,10 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pwdlib import PasswordHash
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from config import settings
+from sqlalchemy import select 
+from settings import settings
 import models
-from database import get_db
+from database import DBSession
 
 password_hash = PasswordHash.recommended()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/users/token")
@@ -29,12 +28,12 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
         expire = datetime.now(UTC) + expires_delta
     else:
         expire = datetime.now(UTC) + timedelta(
-            minutes=settings.access_token_expire_minutes
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(
-        to_encode, settings.secret_key.get_secret_value(), algorithm=settings.algorithm
+        to_encode, settings.SECRET_KEY.get_secret_value(), algorithm=settings.ALGORITHM
     )
     return encoded_jwt
 
@@ -43,8 +42,8 @@ def verify_access_token(token: str) -> str | None:
     try:
         payload = jwt.decode(
             token,
-            settings.secret_key.get_secret_value(),
-            algorithms=[settings.algorithm],
+            settings.SECRET_KEY.get_secret_value(),
+            algorithms=[settings.ALGORITHM],
             options={"require": ["exp", "sub"]},
         )
     except jwt.InvalidTokenError:
