@@ -1,6 +1,7 @@
 from datetime import datetime, UTC
 import json
 from typing import List, Dict, Any, Optional
+from interview_evaluation import trigger_stage_evaluation_pipeline
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import models 
@@ -56,8 +57,9 @@ You are an advanced AI Interviewer simulation engine acting out a live voice ses
 """.strip()
 
 class ActiveInterviewState:
-    def __init__(self, practice_session_id: int, questions_and_answers_json: str):
+    def __init__(self, practice_session_id: int, stage_id: int,  questions_and_answers_json: str):
         self.practice_session_id = practice_session_id
+        self.stage_id = stage_id
         # Parse the JSON string containing the static questions from the Stage template
         self.master_questions: List[Dict[str, Any]] = [{q_a["question"]:q_a["expected_behavior"]} 
                                                        for q_a in json.loads(questions_and_answers_json)]
@@ -168,6 +170,7 @@ async def initialize_active_session_state(stage_id: int, practice_session_id: in
     # Instantiate the memory tracker instance to be consumed by Pipecat hooks
     return ActiveInterviewState(
         practice_session_id=practice_session_id, 
+        stage_id=stage_id,
         questions_and_answers_json=qas_json
     )
 
@@ -207,11 +210,3 @@ async def close_and_persist_interview_stage(active_session: ActiveInterviewState
     await trigger_stage_evaluation_pipeline(active_session)
 
 
-async def trigger_stage_evaluation_pipeline(practice_session_id: int, db: AsyncSession):
-    """
-    Placeholder for your LLM background evaluation logic.
-    """
-    print(f"Triggering asynchronous LLM evaluation analysis for PracticeStage: {practice_session_id}...")
-    # Your background LLM engine reads the answers table for this practice_session_id,
-    # grades the core behavior patterns, and writes back to an evaluation layer.
-    pass

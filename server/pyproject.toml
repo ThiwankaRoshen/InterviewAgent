@@ -34,6 +34,8 @@ dependencies = [
     "pymupdf>=1.28.0",
     "langchain-mistralai>=1.1.5",
     "daily-python>=0.30.0",
+    "reportlab>=5.0.0",
+    "markdown2>=2.5.5",
 ]
 
 [dependency-groups]
