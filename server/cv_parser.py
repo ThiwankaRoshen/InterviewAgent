@@ -5,8 +5,10 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.runnables import RunnablePassthrough 
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
-import json
-from pyresparser import ResumeParser
+import json 
+import fitz
+from langsmith import traceable
+from settings import settings
 
 # ============================================
 # PYDANTIC SCHEMAS FOR STRUCTURED OUTPUT
@@ -67,8 +69,14 @@ class ParsedResume(BaseModel):
 class LangChainResumeParser:
     """Parse resumes using only LangChain components"""
     
-    def __init__(self, model_name: str = "gpt-4o-mini", temperature: float = 0):
-        self.llm = ChatOpenAI(model=model_name, temperature=temperature)
+    def __init__(self,  temperature: float = 0):
+        self.llm = ChatOpenAI(
+            base_url=settings.BASE_URL_INTERVIEW_GEN,
+            model=settings.MODEL_INTERVIEW_GEN,
+            temperature=temperature,
+            api_key=settings.GITHUB_TOKEN_INTERVIEW_GEN,
+        ) 
+        
         self.resume_parser = PydanticOutputParser(pydantic_object=ParsedResume)
         
         self.prompt = ChatPromptTemplate.from_messages([
@@ -110,6 +118,21 @@ class LangChainResumeParser:
 
 
 
-def parse_using_pyresparser(cv_file_path: str)->str:
-    data = ResumeParser(cv_file_path).get_extracted_data()
-    return json.dumps(data, indent=4)
+
+
+
+@traceable(name="PyMuPDF Resume Parser")
+def parse_using_pymupdf(pdf_path: str) -> str:
+    doc = fitz.open(pdf_path)
+    text = ""
+
+    for page in doc:
+        text += page.get_text()
+
+    return text
+
+# # parsed_resume = parse_using_pymupdf("media/cv_files/0470b3ff7cc94f09877c7ae2e8e56ed4.pdf")
+# parser = LangChainResumeParser()
+
+# parsed_resume = parser.parse("media/cv_files/0470b3ff7cc94f09877c7ae2e8e56ed4.pdf")
+# print(parsed_resume)

@@ -6,8 +6,9 @@ from typing import List
 from langchain_openai import ChatOpenAI
 
 import models
-from cv_parser import parse_using_pyresparser
+from cv_parser import parse_using_pymupdf, LangChainResumeParser
 from interview_gen import InterviewOrchestrator, InterviewPlan, StageGeneration
+from settings import settings
 
 
 def mock_ai_generation_engine(session: models.Session) -> list[schemas.StageBase]:
@@ -59,8 +60,12 @@ async def create_interview_session_service(
     session: models.Session,
 ) -> List[schemas.StageBase]:
     # 1. Instantiate basic LangChain OpenAI model wrappers.
-    # Using 'gpt-4o-mini' for fast reasoning or 'gpt-4o' for ultra-complex profiles.
-    base_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+    base_llm = ChatOpenAI(
+            base_url=settings.BASE_URL_INTERVIEW_GEN,
+            model=settings.MODEL_INTERVIEW_GEN,
+            temperature=0.2,
+            api_key=settings.GITHUB_TOKEN_INTERVIEW_GEN,
+        ) 
 
     # 2. Bind structured output formats natively using LangChain
     planner_llm = base_llm.with_structured_output(InterviewPlan)
@@ -69,8 +74,11 @@ async def create_interview_session_service(
     # 3. Supply to the Orchestrator
     orchestrator = InterviewOrchestrator(planner_llm=planner_llm, stage_llm=stage_llm)
 
-    cv_content = parse_using_pyresparser(session.cv_file_path)
-
+    # cv_content = parse_using_pymupdf(session.cv_file_path)
+    
+    parser = LangChainResumeParser()
+    cv_content = parser.parse(session.cv_file_path)
+    
     jd = session.job_description
 
     company_description = session.company_info
