@@ -77,7 +77,7 @@ async def create_interview_session_service(
     
     await manager.send_progress(session_id, "Finalizing interview plan", 95)
     
-    result = stringify_stage(pipeline_result)
+    result = [stringify_stage(result) for result in pipeline_result]
     
     await manager.send_progress(session_id, "Complete", 100)
     await manager.send(session_id, {

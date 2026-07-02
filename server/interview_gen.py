@@ -79,6 +79,7 @@ class InterviewPlanner:
         .with_structured_output(InterviewPlan)
         """
         self.model = structured_llm
+        self.max_retries = 2  # Number of retries for LLM calls
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", PLANNER_SYSTEM_PROMPT),
             ("user", """
@@ -101,12 +102,25 @@ class InterviewPlanner:
     async def plan_interview(
         self, cv_text: str, jd_text: str, company_info: str, additional_notes: str
     ) -> InterviewPlan:
-        return await self.chain.ainvoke({
-            "cv_text": cv_text,
-            "jd_text": jd_text,
-            "company_info": company_info,
-            "additional_notes": additional_notes
-        })
+        
+        # Add a retry mechanism to handle transient LLM parsing failures
+        for attempt in range(self.max_retries + 1):
+            result = await self.chain.ainvoke({
+                "cv_text": cv_text,
+                "jd_text": jd_text,
+                "company_info": company_info,
+                "additional_notes": additional_notes
+            })
+            
+            if result is None:
+                raise ValueError("Model returned None")
+            
+            return result
+        
+        raise ValueError(
+            f"StageGenerator LLM returned None for Planning after {self.max_retries + 1} attempts. "
+            "This usually happens when the model fails to use the required tool/function calling. " 
+        )
          
           
 
@@ -117,6 +131,7 @@ class StageGenerator:
         .with_structured_output(StageGeneration)
         """
         self.model = structured_llm
+        self.max_retries = 2  # Number of retries for LLM calls
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", STAGE_SYSTEM_PROMPT),
             ("user", """
@@ -134,13 +149,22 @@ class StageGenerator:
     async def generate_stage_content(
         self, candidate_summary: str, stage_plan: InterviewStagePlan
     ) -> StageGeneration:
-        return await self.chain.ainvoke({
-            "candidate_summary": candidate_summary,
-            "stage_name": stage_plan.stage_name,
-            "stage_description": stage_plan.stage_description,
-            "objective": stage_plan.objective
-        })
-
+        # Add a retry mechanism to handle transient LLM parsing failures
+        for attempt in range(self.max_retries + 1):
+            result = await self.chain.ainvoke({
+                "candidate_summary": candidate_summary,
+                "stage_name": stage_plan.stage_name,
+                "stage_description": stage_plan.stage_description,
+                "objective": stage_plan.objective
+            })
+            
+            if result is not None:
+                return result
+                
+        raise ValueError(
+            f"StageGenerator LLM returned None for stage '{stage_plan.stage_name}' after {self.max_retries + 1} attempts. "
+            "This usually happens when the model fails to use the required tool/function calling. " 
+        )
 
 
 class InterviewOrchestrator:
