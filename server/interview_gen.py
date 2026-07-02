@@ -25,7 +25,7 @@ class InterviewQuestion(BaseModel):
 
 class StageGeneration(BaseModel):
     interviewer_persona: str = Field(..., description="The dynamic persona profile for the interviewer of this stage.")
-    questions: List[InterviewQuestion] = Field(..., description="List of questions tailored to this stage and the candidate profile.")
+    questions_and_answers: List[InterviewQuestion] = Field(..., description="List of questions and expected answers tailored to this stage and the candidate profile.")
 
 class StageBase(BaseModel):
     stage_order: int
@@ -42,7 +42,7 @@ Your job is to analyze a candidate's context (Resume, Job Description, Company P
 Strict Rules:
 1. Synthesize and compress the candidate's background into a highly dense `candidate_summary` (roughly 200-300 tokens) focusing on core experience, standout projects, and tech stack match.
 2. Identify explicit strengths and gaps/weaknesses relative to the Job Description.
-3. Define an ordered sequence of focused interview stages. Do NOT generate interviewers or specific questions yet. Only define the metadata, description, and objective for each stage.
+3. Define an ordered sequence of focused interview stages. Do NOT generate interviewers or specific questions yet. Only define the metadata, description for each stage.
 """
 
 STAGE_SYSTEM_PROMPT = """You are a specialized AI Interviewer Generator operating as a worker node.
@@ -50,7 +50,7 @@ Your task is to take a high-level interview stage plan and flesh out a hyper-rea
 
 You will be given:
 - The compressed candidate profile (Summary, Strengths, Weaknesses)
-- The specific Stage Info (Name, Description, Objective)
+- The specific Stage Info (Name, Description)
 
 Guidelines:
 1. Craft a distinct, realistic `interviewer_persona`. The persona must match the domain (e.g., a warm HR Specialist for Culture, a demanding Principal Architect for System Design).
@@ -145,6 +145,7 @@ class InterviewOrchestrator:
             company_info=company_info, 
             additional_notes=additional_notes
         )
+        print(f"Generated Interview Plan: {plan}")
         
         # Phase 2: Parallelizing worker execution with asyncio.gather
         tasks = [
@@ -153,6 +154,7 @@ class InterviewOrchestrator:
         ]
         
         generated_stages: List[StageGeneration] = await asyncio.gather(*tasks)
+        print(f"Generated Stage Content: {generated_stages}")
         
         # Phase 3: Zipping structural plans with dynamic content
         final_interview_pipeline: List[StageBase] = []
@@ -162,8 +164,8 @@ class InterviewOrchestrator:
                 stage_name=stage_plan.stage_name,
                 stage_description=stage_plan.stage_description,
                 interviewer_persona=generated_content.interviewer_persona,
-                questions=generated_content.questions
+                questions_and_answers=generated_content.questions_and_answers
             )
             final_interview_pipeline.append(merged_stage)
-            
+        print(f"Final Interview Pipeline: {final_interview_pipeline}")
         return final_interview_pipeline

@@ -1,3 +1,4 @@
+from langchain_mistralai import ChatMistralAI
 from langchain_openai import ChatOpenAI
 from langchain_community.document_loaders import PyPDFLoader 
 from langchain_core.prompts import ChatPromptTemplate
@@ -70,12 +71,19 @@ class LangChainResumeParser:
     """Parse resumes using only LangChain components"""
     
     def __init__(self,  temperature: float = 0):
-        self.llm = ChatOpenAI(
-            base_url=settings.BASE_URL_INTERVIEW_GEN,
-            model=settings.MODEL_INTERVIEW_GEN,
-            temperature=temperature,
-            api_key=settings.GITHUB_TOKEN_INTERVIEW_GEN,
-        ) 
+        # self.llm = ChatOpenAI(
+        #     base_url=settings.BASE_URL_INTERVIEW_GEN,
+        #     model=settings.MODEL_INTERVIEW_GEN,
+        #     temperature=temperature,
+        #     api_key=settings.GITHUB_TOKEN_INTERVIEW_GEN,
+        # ) 
+        
+        self.llm = ChatMistralAI(
+            model="mistral-small-latest",
+            temperature=0,
+            max_retries=2,
+            mistral_api_key=settings.MISTRAL_API_KEY
+        )
         
         self.resume_parser = PydanticOutputParser(pydantic_object=ParsedResume)
         
