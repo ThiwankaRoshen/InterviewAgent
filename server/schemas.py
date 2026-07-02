@@ -83,7 +83,10 @@ class InterviewPlanResponse(BaseModel):
 
 class StartPracticeRequest(BaseModel):
     stage_id: int = Field(..., description="The ID of the master Stage template being practiced")
-    session_id: int = Field(..., description="The ID of the parent Session for this practice run")
+    practice_session_id: int = Field(..., description="The ID of the parent Session for this practice run")
+
+class StopPracticeRequest(BaseModel):
+    room_url: str = Field(..., description="The Daily room URL to stop the practice session")
 
 
 class StartPracticeResponse(BaseModel):

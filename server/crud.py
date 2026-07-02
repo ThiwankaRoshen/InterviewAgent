@@ -119,28 +119,19 @@ async def get_interview_stage(
     return stage
 
 
-def initialize_practice_run(
+async def create_practice_session(
     db: AsyncSession, session_id: int
-) -> tuple[models.PracticeSession, models.PracticeStage]:
-    """
-    Creates both the active run tracking metadata rows in one transaction.
-    """
-    # 1. Start the root Practice Session
+) -> models.PracticeSession: 
     practice_session = models.PracticeSession(
-        session_id=session_id, created_at=datetime.now(UTC)
+        session_id=session_id, 
+        created_at=datetime.now(UTC)
     )
-    db.add(practice_session)
-    db.flush()  # Flushes to get db_practice_session.id before committing
+    db.add(practice_session) 
 
-    # 2. Start the tracking wrapper for this stage run
-    practice_stage = models.PracticeStage(practice_session_id=practice_session.id)
-    db.add(practice_stage)
+    await db.commit()
+    await db.refresh(practice_session)
 
-    db.commit()
-    db.refresh(practice_session)
-    db.refresh(practice_stage)
-
-    return practice_session, practice_stage
+    return practice_session
 
 
 def record_live_answer(

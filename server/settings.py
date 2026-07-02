@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     DEEPGRAM_VOICE: str
     GITHUB_TOKEN: str
     OPENAI_MODEL: str
+    DAILY_API_KEY: str
+    DAILY_API_URL: str = "https://api.daily.co/v1"
     
     LANGSMITH_API_KEY: str
     LANGSMITH_PROJECT: str

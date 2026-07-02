@@ -1,3 +1,4 @@
+from datetime import datetime, UTC
 import json
 from typing import List, Dict, Any, Optional
 from sqlalchemy import select
@@ -55,10 +56,12 @@ You are an advanced AI Interviewer simulation engine acting out a live voice ses
 """.strip()
 
 class ActiveInterviewState:
-    def __init__(self, practice_stage_id: int, questions_and_answers_json: str):
-        self.practice_stage_id = practice_stage_id
+    def __init__(self, practice_session_id: int, questions_and_answers_json: str):
+        self.practice_session_id = practice_session_id
         # Parse the JSON string containing the static questions from the Stage template
-        self.master_questions: List[Dict[str, Any]] = json.loads(questions_and_answers_json)
+        self.master_questions: List[Dict[str, Any]] = [{q_a["question"]:q_a["expected_behavior"]} 
+                                                       for q_a in json.loads(questions_and_answers_json)]
+
         
         self.current_index = 0
         self.answers_log: List[Dict[str, Any]] = []
@@ -151,7 +154,7 @@ def make_interview_tools(active_session: ActiveInterviewState):
     return tools_schema, handlers
     
 
-async def initialize_active_session_state(stage_id: int, practice_stage_id: int, db: AsyncSession) -> ActiveInterviewState:
+async def initialize_active_session_state(stage_id: int, practice_session_id: int, db: AsyncSession) -> ActiveInterviewState:
     # Pull the JSON array definition out of the master template stage
     result = await db.execute(
         select(models.Stage.questions_and_answers)
@@ -164,7 +167,7 @@ async def initialize_active_session_state(stage_id: int, practice_stage_id: int,
         
     # Instantiate the memory tracker instance to be consumed by Pipecat hooks
     return ActiveInterviewState(
-        practice_stage_id=practice_stage_id, 
+        practice_session_id=practice_session_id, 
         questions_and_answers_json=qas_json
     )
 
@@ -174,10 +177,18 @@ async def close_and_persist_interview_stage(active_session: ActiveInterviewState
     Flushes the memory state buffer straight to SQLite in a single transaction 
     and opens the floor for evaluation triggers.
     """
+    # 0. Init a PracticeStage record to mark the end of this run
+    practice_stage = models.PracticeStage(
+        practice_session_id=active_session.practice_session_id,
+    )
+    db.add(practice_stage)
+    await db.commit()
+    await db.refresh(practice_stage)
+    
     # 1. Map raw list dictionaries to explicit Answer object models
     bulk_answers = [
         models.Answer(
-            practice_stage_id=active_session.practice_stage_id,
+            practice_stage_id=practice_stage.id,
             question_order=item["question_order"],
             question_text=item["question_text"],
             behaviour=item["behaviour"],
@@ -193,14 +204,14 @@ async def close_and_persist_interview_stage(active_session: ActiveInterviewState
     # 3. Trigger Evaluation Core Processing Pipelines
     # At this point, your backend can safely execute an async worker task to read 
     # these written answers, contrast them against expectations, and generate the summary report.
-    await trigger_stage_evaluation_pipeline(active_session.practice_stage_id, db)
+    await trigger_stage_evaluation_pipeline(active_session)
 
 
-async def trigger_stage_evaluation_pipeline(practice_stage_id: int, db: AsyncSession):
+async def trigger_stage_evaluation_pipeline(practice_session_id: int, db: AsyncSession):
     """
     Placeholder for your LLM background evaluation logic.
     """
-    print(f"Triggering asynchronous LLM evaluation analysis for PracticeStage: {practice_stage_id}...")
-    # Your background LLM engine reads the answers table for this practice_stage_id,
+    print(f"Triggering asynchronous LLM evaluation analysis for PracticeStage: {practice_session_id}...")
+    # Your background LLM engine reads the answers table for this practice_session_id,
     # grades the core behavior patterns, and writes back to an evaluation layer.
     pass

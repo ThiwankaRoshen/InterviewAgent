@@ -1,76 +1,128 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-import models
-from database import DBSession
-import crud
-from schemas import AnswerCreate, AnswerResponse
+# main.py
+import os
 import asyncio
-from fastapi import FastAPI, Request, Depends
-from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
+import httpx
+from fastapi import APIRouter, FastAPI, HTTPException, status
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from loguru import logger
 
-from database import AsyncSessionLocal
-from bot import run_bot_entrypoint
+from bot_daily import run_bot_entrypoint
+from auth import CurrentUser
+from schemas import StartPracticeRequest, StartPracticeResponse, StopPracticeRequest
+from server import crud
+from server.database import DBSession
+from settings import settings
+
+active_bots = {}  # room_url -> task
+
+
+
 
 router = APIRouter()
-pcs_map: dict[str, SmallWebRTCConnection] = {}
-background_tasks: set[asyncio.Task] = (
-    set()
-)  # keep strong refs so tasks aren't GC'd mid-flight
 
 
-@router.post(
-    "/practices/{practice_stage_id}/answers",
-    response_model=AnswerResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Web-hook stream logger used by Pipecat background pipeline context tools",
-)
-def log_streamed_answer(
-    practice_stage_id: int, answer_input: AnswerCreate, db: DBSession
+async def create_daily_room() -> dict:
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{settings.DAILY_API_URL}/rooms",
+            headers={
+                "Authorization": f"Bearer {settings.DAILY_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "properties": {
+                    "enable_prejoin_ui": False,
+                    "enable_screenshare": False,
+                    "enable_chat": False,
+                    "start_video_off": True,
+                    "start_audio_off": False,
+                    "exp": 3600,
+                }
+            }
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+async def delete_daily_room(room_url: str):
+    room_name = room_url.split("/")[-1]
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.delete(
+                f"{settings.DAILY_API_URL}/rooms/{room_name}",
+                headers={"Authorization": f"Bearer {settings.DAILY_API_KEY}"}
+            )
+        except Exception as e:
+            logger.warning(f"Failed to delete room: {e}")
+
+
+@router.post("/start", response_model=StartPracticeResponse)
+async def start_bot(
+    request: StartPracticeRequest,
+    currentUser: CurrentUser,
+    ):
+    try:
+        room = await create_daily_room()
+        room_url = room["url"]
+        logger.info(f"Created room: {room_url}")
+        
+        task = asyncio.create_task(
+            run_bot_entrypoint(
+                room_url=room_url,
+                token=room["token"], 
+                stage_id=request.stage_id,
+                practice_session_id=request.practice_session_id
+            )
+        )
+        active_bots[room_url] = task
+        
+        return StartPracticeResponse(
+            practice_session_id=request.practice_session_id,
+            stage_id=request.stage_id,
+            room_url= room_url,
+            token= room["token"],  
+        )
+    except Exception as e:
+        logger.error(f"Start error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/stop")
+async def stop_bot(
+    request: StopPracticeRequest,
+    currentUser: CurrentUser,
+    ):
+    room_url = request.room_url
+    if room_url and room_url in active_bots:
+        active_bots.pop(room_url).cancel()
+    await delete_daily_room(room_url)
+    return {"status": "stopped"}
+
+
+
+@router.post("")
+async def create_practice_session(
+    session_id: int,
+    current_user: CurrentUser,
+    db: DBSession
 ):
-    """
-    This endpoint can be called securely by your Pipecat server process (using custom tools)
-    every time a question finishes, logging the transcription and metrics in real-time.
-    """
-    # Confirm valid destination block
-    stage_exists = (
-        db.query(models.PracticeStage)
-        .filter(models.PracticeStage.id == practice_stage_id)
-        .first()
-    )
-    if not stage_exists:
+    session = await crud.get_session(db=db, session_id=session_id)
+    if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Target running context not found.",
+            detail=f"Session with ID {session_id} does not exist.",
+        )
+    
+    if session.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to create a practice session for this session.",
         )
 
-    return crud.record_live_answer(
-        db=db, practice_stage_id=practice_stage_id, answer_data=answer_input
-    )
+    practice_session = await crud.create_practice_session(db=db, session_id=session_id)
+    
+    return {"practice_session_id": practice_session.id}
 
 
-@router.post("/api/offer/{stage_id}/{practice_stage_id}")
-async def offer(stage_id: int, practice_stage_id: int, request: Request):
-    body = await request.json()
-    pc_id = body.get("pc_id")
 
-    if pc_id and pc_id in pcs_map:
-        connection = pcs_map[pc_id]
-        await connection.renegotiate(sdp=body["sdp"], type=body["type"])
-    else:
-        connection = SmallWebRTCConnection(ice_servers=[])
-        await connection.initialize(sdp=body["sdp"], type=body["type"])
-
-        @connection.event_handler("closed")
-        async def on_closed(conn):
-            pcs_map.pop(conn.pc_id, None)
-
-        # Launch the bot pipeline in the background — do NOT await it here,
-        # or the HTTP response (SDP answer) never gets sent back to the client.
-        task = asyncio.create_task(
-            run_bot_entrypoint(connection, stage_id, practice_stage_id)
-        )
-        background_tasks.add(task)
-        task.add_done_callback(background_tasks.discard)
-
-    answer = connection.get_answer()
-    pcs_map[answer["pc_id"]] = connection
-    return answer

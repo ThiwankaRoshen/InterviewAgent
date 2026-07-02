@@ -1,9 +1,16 @@
+from asyncio import subprocess
+import os
+import sys
+import time
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status, Depends
+import httpx
 from auth import CurrentUser
 from sqlalchemy import select 
 import models
 from database import DBSession
 import crud, schemas
+from settings import settings
 from services import create_interview_session_service
 from ws_connection_manager import manager
 
@@ -153,44 +160,7 @@ async def get_interview_plan(session_id: int, current_user: CurrentUser, db: DBS
 
     return schemas.InterviewPlanResponse(session_id=session_id, stages=stages)
 
-
-@router.post(
-    "/{session_id}/practice",
-    response_model=schemas.StartPracticeResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Initialize DB session tracking data and fetch real-time Pipecat parameters",
-)
-async def start_practice_session(
-    session_id: int, payload: schemas.StartPracticeRequest, db: DBSession
-):
-    """
-    Called by the Web UI. It builds the row identifiers for this attempt, fetches
-    the context to hand off to Pipecat, and returns the room tokens to the frontend client.
-    """
-    stage = await db.execute(
-        select(models.Stage).where(
-            models.Stage.id == payload.stage_id, models.Stage.session_id == session_id
-        )
-    )
-    stage = stage.scalar_one()
-    if not stage:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Specified stage configuration mapping does not match this interview blueprint.",
-        )
-
-    p_session, p_stage = crud.initialize_practice_run(db, session_id=session_id)
-
-    mock_room_url = f"https://your-app.daily.co/interview-room-{p_stage.id}"
-    mock_token = f"jwt-token-for-stage-{p_stage.id}"
-
-    return schemas.StartPracticeResponse(
-        practice_session_id=p_session.id,
-        practice_stage_id=p_stage.id,
-        room_url=mock_room_url,
-        token=mock_token,
-    )
-
+ 
 
 @router.patch(
     "/{session_id}/feedback",
