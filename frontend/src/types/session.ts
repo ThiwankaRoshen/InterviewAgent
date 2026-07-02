@@ -15,3 +15,8 @@ export interface StageItem {
 export interface SessionDetail extends SessionItem {
   stages: StageItem[]
 }
+
+export interface InterviewPlanResponse {
+  session_id: number
+  stages: StageItem[]
+}

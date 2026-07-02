@@ -12,7 +12,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StartletteHttpException
 from database import Base, engine
 from routers import users, practices, sessions, ws
+from dotenv import load_dotenv
 
+load_dotenv()  # Load environment variables from .env file for langsmith
 
 @asynccontextmanager
 async def lifesapn(_app: FastAPI):

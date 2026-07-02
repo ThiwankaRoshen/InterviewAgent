@@ -1,4 +1,4 @@
-import type { SessionDetail, SessionItem } from '../types/session'
+import type { InterviewPlanResponse, SessionDetail, SessionItem } from '../types/session'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
@@ -39,6 +39,21 @@ export async function createSession(token: string, formData: FormData): Promise<
 
 export async function fetchSessionDetail(token: string, sessionId: number): Promise<SessionDetail> {
   const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return response.json()
+}
+
+export async function generateSessionStages(token: string, sessionId: number): Promise<InterviewPlanResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/stages`, {
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
     },

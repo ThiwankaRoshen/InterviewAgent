@@ -48,11 +48,13 @@ export function SessionsPage({ token }: SessionsPageProps) {
         session={activeSession}
         loading={detailLoading}
         error={detailError}
+        token={token}
         onBack={() => {
           setSelectedSessionId(null)
           setActiveSession(null)
           setDetailError('')
         }}
+        onSessionUpdated={(updatedSession) => setActiveSession(updatedSession)}
       />
     )
   }
