@@ -5,6 +5,14 @@ interface SessionListProps {
   loading: boolean
 }
 
+function truncate(text: string, maxLength = 90) {
+  if (!text) {
+    return 'No details provided.'
+  }
+
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text
+}
+
 export function SessionList({ sessions, loading }: SessionListProps) {
   if (loading) {
     return <p className="empty-state">Loading your sessions…</p>
@@ -19,11 +27,12 @@ export function SessionList({ sessions, loading }: SessionListProps) {
       {sessions.map((session) => (
         <article key={session.id} className="session-card">
           <div className="session-card__top">
-            <h3>{session.job_description}</h3>
+            <h3>Session {session.id}</h3>
             <span>{new Date(session.date_created).toLocaleDateString()}</span>
           </div>
-          <p className="session-card__meta">Company: {session.company_info}</p>
-          <p className="session-card__meta">Notes: {session.additional_info}</p>
+          <p className="session-card__meta">{truncate(session.job_description)}</p>
+          <p className="session-card__meta">{truncate(session.company_info)}</p>
+          <p className="session-card__meta">{truncate(session.additional_info)}</p>
         </article>
       ))}
     </div>

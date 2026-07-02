@@ -116,6 +116,15 @@
   cursor: wait;
 }
 
+.ghost-btn {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: white;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
 .auth-card__success {
   display: flex;
   flex-direction: column;
@@ -131,15 +140,20 @@
   text-align: left;
 }
 
-.sessions-page__header {
+.sessions-page__topbar {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.sessions-page__header h2 {
+  margin-bottom: 4px;
 }
 
 .session-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -148,6 +162,7 @@
   border-radius: 16px;
   padding: 16px;
   background: #f8fafc;
+  min-height: 140px;
 }
 
 .session-card__top {
@@ -155,7 +170,7 @@
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .session-card__top h3 {
@@ -172,6 +187,33 @@
 .session-card__meta {
   font-size: 0.95rem;
   color: var(--text);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 20;
+}
+
+.modal-card {
+  width: min(100%, 520px);
+  background: white;
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.modal-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .empty-state {
@@ -184,8 +226,12 @@
     padding: 24px;
   }
 
-  .session-card__top {
+  .sessions-page__topbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .session-list {
+    grid-template-columns: 1fr;
   }
 }
