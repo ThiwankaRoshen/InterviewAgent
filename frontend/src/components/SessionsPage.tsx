@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSessions } from '../hooks/useSessions'
-import { CreateSessionForm } from './CreateSessionForm'
-import { SessionList } from './SessionList'
+import { fetchSessionDetail } from '../services/sessionService'
+import { SessionsDashboard } from './SessionsDashboard'
+import { SessionDetailView } from './SessionDetailView'
+import type { SessionDetail } from '../types/session'
 
 interface SessionsPageProps {
   token: string | null
@@ -9,50 +11,61 @@ interface SessionsPageProps {
 
 export function SessionsPage({ token }: SessionsPageProps) {
   const { sessions, loading, message, error, handleCreateSession } = useSessions(token)
-  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
+  const [activeSession, setActiveSession] = useState<SessionDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
+
+  useEffect(() => {
+    if (!selectedSessionId || !token) {
+      return
+    }
+
+    const loadSessionDetail = async () => {
+      setDetailLoading(true)
+      setDetailError('')
+
+      try {
+        const detail = await fetchSessionDetail(token, selectedSessionId)
+        setActiveSession(detail)
+      } catch (error) {
+        setDetailError(error instanceof Error ? error.message : 'Unable to load session details.')
+      } finally {
+        setDetailLoading(false)
+      }
+    }
+
+    void loadSessionDetail()
+  }, [selectedSessionId, token])
 
   if (!token) {
     return null
   }
 
+  if (selectedSessionId) {
+    return (
+      <SessionDetailView
+        session={activeSession}
+        loading={detailLoading}
+        error={detailError}
+        onBack={() => {
+          setSelectedSessionId(null)
+          setActiveSession(null)
+          setDetailError('')
+        }}
+      />
+    )
+  }
+
   return (
-    <div className="sessions-page">
-      <div className="sessions-page__header">
-        <div className="sessions-page__topbar">
-          <div>
-            <h2>Your sessions</h2>
-            <p>Create and manage your interview preparation sessions.</p>
-          </div>
-          <button type="button" className="primary-btn" onClick={() => setIsCreateOpen(true)}>
-            Create session
-          </button>
-        </div>
-      </div>
-
-      {message ? <div className="feedback success">{message}</div> : null}
-      {error ? <div className="feedback error">{error}</div> : null}
-
-      {isCreateOpen ? (
-        <div className="modal-backdrop" onClick={() => setIsCreateOpen(false)}>
-          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-card__header">
-              <h3>Create new session</h3>
-              <button type="button" className="ghost-btn" onClick={() => setIsCreateOpen(false)}>
-                Close
-              </button>
-            </div>
-            <CreateSessionForm
-              onCreate={async (formData) => {
-                await handleCreateSession(formData)
-                setIsCreateOpen(false)
-              }}
-              loading={loading}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      <SessionList sessions={sessions} loading={loading} />
-    </div>
+    <SessionsDashboard
+      token={token}
+      sessions={sessions}
+      loading={loading}
+      message={message}
+      error={error}
+      onCreateSession={handleCreateSession}
+      onSelectSession={(sessionId) => setSelectedSessionId(sessionId)}
+    />
   )
 }
