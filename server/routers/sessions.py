@@ -50,7 +50,7 @@ async def list_user_sessions(current_user: CurrentUser, db: DBSession):
 
 @router.get(
     "/{session_id}",
-    response_model=schemas.SessionResponse,
+    response_model=schemas.SessionPublic,
     status_code=status.HTTP_200_OK,
 )
 async def get_interview_session(
@@ -61,16 +61,18 @@ async def get_interview_session(
         db=db,
         session_id=session_id,
     )
-    if session.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to access this session.",
-        )
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found.",
         )
+        
+    if session.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to access this session.",
+        )
+    
     return session
 
 

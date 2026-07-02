@@ -1,6 +1,7 @@
 from datetime import datetime, UTC
 from fastapi import UploadFile
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 import models
 import schemas
 from cv_utils import save_cv_file
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 async def get_session(db: AsyncSession, session_id: int) -> models.Session:
     session = await db.execute(
-        select(models.Session).where(models.Session.id == session_id)
+        select(models.Session).options(selectinload(models.Session.stages)).where(models.Session.id == session_id)
     )
 
     session = session.scalars().first()
