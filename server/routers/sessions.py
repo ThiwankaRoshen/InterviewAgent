@@ -78,7 +78,7 @@ async def get_interview_session(
 
 
 @router.post(
-    "/sessions/{session_id}/stages",
+    "/{session_id}/stages",
     response_model=schemas.InterviewPlanResponse,
     status_code=status.HTTP_201_CREATED,
 )
