@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     MODEL_INTERVIEW_GEN: str
     GITHUB_TOKEN_INTERVIEW_GEN: str 
     MISTRAL_API_KEY: str
+    MISTRAL_MODEL: str
     
     ASSEMBLYAI_API_KEY: str
     DEEPGRAM_API_KEY: str

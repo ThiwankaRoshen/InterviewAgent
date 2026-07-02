@@ -29,7 +29,7 @@ async def create_interview_session_service(
     await manager.send_progress(session_id, "Initializing AI models", 5)
     
     base_llm = ChatMistralAI(
-        model="mistral-small-latest",
+        model=settings.MISTRAL_MODEL,
         temperature=0,
         max_retries=2,
         mistral_api_key=settings.MISTRAL_API_KEY

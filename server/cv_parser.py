@@ -79,7 +79,7 @@ class LangChainResumeParser:
         # ) 
         
         self.llm = ChatMistralAI(
-            model="mistral-small-latest",
+            model=settings.MISTRAL_MODEL,
             temperature=0,
             max_retries=2,
             mistral_api_key=settings.MISTRAL_API_KEY
