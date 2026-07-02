@@ -17,7 +17,7 @@ async def get_session(db: AsyncSession, session_id: int) -> models.Session:
     return session
 
 
-async def get_user_sessions(db: AsyncSession, user_id: int) -> list[models.Session]:
+async def get_sessions(db: AsyncSession, user_id: int) -> list[models.Session]:
     results = await db.execute(
         select(models.Session).where(models.Session.user_id == user_id)
     )
@@ -44,7 +44,7 @@ async def create_session(
     user_id: int
 ) -> models.Session:
 
-    cv_file_name = save_cv_file(cv)
+    cv_file_name = await save_cv_file(cv)
 
     session = models.Session(
         cv_file_name=cv_file_name,

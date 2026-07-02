@@ -1,5 +1,4 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile, status, Depends
-from questionary import Form
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status, Depends
 from auth import CurrentUser
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +44,7 @@ async def create_interview_session(
     status_code=status.HTTP_200_OK,
 )
 async def list_user_sessions(current_user: CurrentUser, db: DBSession):
-    sessions = await crud.get_user_sessions(db=db, user_id=current_user.id)
+    sessions = await crud.get_sessions(db=db, user_id=current_user.id)
     return sessions
 
 

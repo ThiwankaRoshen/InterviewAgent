@@ -1,7 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy import select, func
-from sqlalchemy.orm import selectinload
 from schemas import (
     SessionResponse,
     UserUpdate,
@@ -16,7 +15,7 @@ from datetime import timedelta
 from fastapi.security import OAuth2PasswordRequestForm
 from auth import CurrentUser, create_access_token, hash_password, verify_password
 from database import DBSession
-from crud import get_user_cvs
+from crud import get_user_cvs, get_sessions
 from cv_utils import delete_cv_file
 from settings import settings
 
@@ -154,5 +153,5 @@ async def get_user(user_id: int, db: DBSession):
 
 @router.get("/{user_id}/sessions", response_model=list[SessionResponse])
 async def get_user_sessions(user_id: int, db: DBSession):
-    results = await get_user_sessions(db, user_id)
+    results = await get_sessions(db, user_id)
     return results
