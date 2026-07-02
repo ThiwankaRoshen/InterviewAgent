@@ -185,13 +185,29 @@ class InterviewOrchestrator:
         )
         print(f"Generated Interview Plan: {plan}")
         
-        # Phase 2: Parallelizing worker execution with asyncio.gather
-        tasks = [
-            self.stage_generator.generate_stage_content(plan.candidate_summary, stage)
-            for stage in plan.stages
-        ]
+        semaphore = asyncio.Semaphore(3)
+
+        async def worker(stage):
+            async with semaphore:
+                return await self.stage_generator.generate_stage_content(
+                    plan.candidate_summary,
+                    stage,
+                )
+
+        tasks = [worker(stage) for stage in plan.stages]
+
+        generated_stages = await asyncio.gather(
+            *tasks,
+            return_exceptions=True,
+        )
         
-        generated_stages: List[StageGeneration] = await asyncio.gather(*tasks)
+        # Phase 2: Parallelizing worker execution with asyncio.gather
+        # tasks = [
+        #     self.stage_generator.generate_stage_content(plan.candidate_summary, stage)
+        #     for stage in plan.stages
+        # ]
+        
+        # generated_stages: List[StageGeneration] = await asyncio.gather(*tasks)
         print(f"Generated Stage Content: {generated_stages}")
         
         # Phase 3: Zipping structural plans with dynamic content
