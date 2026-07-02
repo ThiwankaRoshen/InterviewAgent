@@ -1,11 +1,10 @@
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status, Depends
 from auth import CurrentUser
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select 
 import models
-from database import DBSession, get_db
+from database import DBSession
 import crud, schemas
-from services import create_interview_session_service, mock_ai_generation_engine
+from services import create_interview_session_service
 
 router = APIRouter()
 

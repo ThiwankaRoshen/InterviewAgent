@@ -1,8 +1,11 @@
+import json
+
 from pydantic import BaseModel, Field
 from typing import List
 import asyncio 
 from langchain_core.runnables import Runnable
 from langchain_core.prompts import ChatPromptTemplate
+import schemas
 
 
 
@@ -33,8 +36,19 @@ class StageBase(BaseModel):
     stage_description: str
     interviewer_persona: str
     questions_and_answers: List[InterviewQuestion]
-    
 
+
+def stringify_stage(stage: StageBase) -> schemas.StageBase:
+    return  schemas.StageBase(
+        stage_order=stage.stage_order,
+        stage_name=stage.stage_name,
+        stage_description=stage.stage_description,
+        interviewer_persona=stage.interviewer_persona,
+        questions_and_answers=json.dumps(
+            [q.model_dump() for q in stage.questions_and_answers],
+            indent=2,
+        ),
+    )
     
 PLANNER_SYSTEM_PROMPT = """You are an expert Talent Acquisition Architect and Lead Technical Recruiter.
 Your job is to analyze a candidate's context (Resume, Job Description, Company Profile, and extra notes) and construct a tailored, strategic interview plan.
