@@ -55,13 +55,13 @@ async def general_http_exception_handler(
     if request.url.path.startswith("/api"):
         return await http_exception_handler(request, exception)
 
-    message = exception.detail if exception.detail else "An Error Occured."
-    return templates.TemplateResponse(
-        request,
-        "error.html",
-        {"status_code": exception.status_code, "message": message},
-        status_code=exception.status_code,
-    )
+    # message = exception.detail if exception.detail else "An Error Occured."
+    # return templates.TemplateResponse(
+    #     request,
+    #     "error.html",
+    #     {"status_code": exception.status_code, "message": message},
+    #     status_code=exception.status_code,
+    # )
 
 
 @app.exception_handler(RequestValidationError)
@@ -71,12 +71,12 @@ async def validation_exception_handler(
     if request.url.path.startswith("/api"):
         return await request_validation_exception_handler(request, exception)
 
-    return templates.TemplateResponse(
-        request,
-        "error.html",
-        {
-            "status_code": status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "message": "Invalid request. Check your inputs again.",
-        },
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-    )
+    # return templates.TemplateResponse(
+    #     request,
+    #     "error.html",
+    #     {
+    #         "status_code": status.HTTP_422_UNPROCESSABLE_CONTENT,
+    #         "message": "Invalid request. Check your inputs again.",
+    #     },
+    #     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+    # )

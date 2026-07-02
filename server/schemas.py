@@ -91,7 +91,7 @@ class StopPracticeRequest(BaseModel):
 
 class StartPracticeResponse(BaseModel):
     practice_session_id: int
-    practice_stage_id: int
+    stage_id: int
     # Pipecat/Daily connection details sent back to your frontend UI
     room_url: str = Field(..., description="The WebRTC/Daily URL for the front-end to connect to voice")
     token: str = Field(..., description="Access token for the voice room session")

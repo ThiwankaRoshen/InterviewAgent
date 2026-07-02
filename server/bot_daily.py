@@ -163,7 +163,7 @@ async def run_bot(
         await worker.queue_frames([LLMRunFrame()])
 
     @transport.event_handler("on_participant_left")
-    async def on_participant_left(transport, participant):
+    async def on_participant_left(transport, participant, reason):
         """User left the Daily room."""
         logger.info(f"Participant left: {participant.get('user_name', 'unknown')}")
         await audio_buffer.stop_recording()
@@ -211,6 +211,7 @@ async def run_bot_entrypoint(
     transport = DailyTransport(
         room_url=room_url,
         token=token,  
+        bot_name="Interview Bot",
         params=DailyParams(
             api_key=os.getenv("DAILY_API_KEY"),
             audio_in_enabled=True,      # Hear the user

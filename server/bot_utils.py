@@ -40,7 +40,6 @@ You are an advanced AI Interviewer simulation engine acting out a live voice ses
 {stage.interviewer_persona}
 
 [CANDIDATE BACKGROUND CONTEXT]
-- CV Reference Key: {session.cv_path}
 - Target Job Specifications: 
 {session.job_description}
 

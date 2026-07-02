@@ -6,12 +6,13 @@ from fastapi import APIRouter, FastAPI, HTTPException, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from loguru import logger
+import time 
 
 from bot_daily import run_bot_entrypoint
 from auth import CurrentUser
 from schemas import StartPracticeRequest, StartPracticeResponse, StopPracticeRequest
-from server import crud
-from server.database import DBSession
+import crud
+from database import DBSession
 from settings import settings
 
 active_bots = {}  # room_url -> task
@@ -21,7 +22,25 @@ active_bots = {}  # room_url -> task
 
 router = APIRouter()
 
-
+async def create_daily_token(room_name: str, is_owner: bool = True) -> str:
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{settings.DAILY_API_URL}/meeting-tokens",
+            headers={
+                "Authorization": f"Bearer {settings.DAILY_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "properties": {
+                    "room_name": room_name,
+                    "is_owner": is_owner,
+                    "exp": int(time.time()) + 3600,
+                }
+            }
+        )
+        response.raise_for_status()
+        return response.json()["token"]
+    
 async def create_daily_room() -> dict:
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -37,7 +56,7 @@ async def create_daily_room() -> dict:
                     "enable_chat": False,
                     "start_video_off": True,
                     "start_audio_off": False,
-                    "exp": 3600,
+                    "exp": int(time.time()) + 3600 ,
                 }
             }
         )
@@ -66,11 +85,12 @@ async def start_bot(
         room = await create_daily_room()
         room_url = room["url"]
         logger.info(f"Created room: {room_url}")
+        token = await create_daily_token(room["name"])
         
         task = asyncio.create_task(
             run_bot_entrypoint(
                 room_url=room_url,
-                token=room["token"], 
+                token=token, 
                 stage_id=request.stage_id,
                 practice_session_id=request.practice_session_id
             )
@@ -81,7 +101,7 @@ async def start_bot(
             practice_session_id=request.practice_session_id,
             stage_id=request.stage_id,
             room_url= room_url,
-            token= room["token"],  
+            token= token,  
         )
     except Exception as e:
         logger.error(f"Start error: {e}")
