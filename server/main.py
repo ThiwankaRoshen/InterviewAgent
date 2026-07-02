@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StartletteHttpException
 from database import Base, engine
-from routers import users, practices, sessions
+from routers import users, practices, sessions, ws
 
 
 @asynccontextmanager
@@ -37,6 +37,7 @@ app.include_router(sessions.router, prefix="/api/sessions", tags=["Sesstions"])
 app.include_router(
     practices.router, prefix="/api/practices", tags=["Practice Sessions"]
 )
+app.include_router(ws.router, prefix="", tags=["WebSocket"])
 
 
 @app.get("/health", include_in_schema=False)

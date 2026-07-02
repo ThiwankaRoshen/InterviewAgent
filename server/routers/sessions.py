@@ -1,10 +1,11 @@
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status, Depends
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status, Depends
 from auth import CurrentUser
 from sqlalchemy import select 
 import models
 from database import DBSession
 import crud, schemas
 from services import create_interview_session_service
+from ws_connection_manager import manager
 
 router = APIRouter()
 
@@ -75,36 +76,59 @@ async def get_interview_session(
     return session
 
 
+
 @router.post(
     "/sessions/{session_id}/stages",
     response_model=schemas.InterviewPlanResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_interview_plan(
-    session_id: int, current_user: CurrentUser, db: DBSession
+    session_id: int,
+    current_user: CurrentUser,
+    db: DBSession,
 ):
+    # Validate session exists
     session = await db.execute(
         select(models.Session).where(models.Session.id == session_id)
     )
     session = session.scalar_one_or_none()
+    
     if not session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session with ID {session_id} does not exist.",
         )
+    
     if session.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to generate a plan for this session.",
         )
 
-    generated_blueprint = await create_interview_session_service(session)
+    try:
+        generated_blueprint = await create_interview_session_service(session)
+    except Exception as e:
+        # Notify WebSocket about the error
+        await manager.send_error(
+            session_id,
+            error="generation_failed",
+            detail=str(e)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate interview plan: {str(e)}"
+        )
 
     saved_stages = await crud.create_interview_stages(
-        db=db, session_id=session_id, generated_stages=generated_blueprint
+        db=db,
+        session_id=session_id,
+        generated_stages=generated_blueprint
     )
 
-    return schemas.InterviewPlanResponse(session_id=session_id, stages=saved_stages)
+    return schemas.InterviewPlanResponse(
+        session_id=session_id,
+        stages=saved_stages
+    )
 
 
 @router.get(
