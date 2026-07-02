@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { generateSessionStages } from '../services/sessionService'
+import { PracticeSessionView } from './PracticeSessionView'
+import { StageItemCard } from './StageItemCard'
+import { usePracticeSession } from '../hooks/usePracticeSession'
 import type { SessionDetail, StageItem } from '../types/session'
 
 interface SessionDetailViewProps {
@@ -36,6 +39,15 @@ export function SessionDetailView({
   onBack,
   onSessionUpdated,
 }: SessionDetailViewProps) {
+  const [selectedStage, setSelectedStage] = useState<StageItem | null>(null)
+  const {
+    practiceSessions,
+    isLoading: practiceLoading,
+    error: practiceError,
+    startPractice,
+    stopPractice,
+    clearSession,
+  } = usePracticeSession({ token, sessionId: session?.id ?? 0 })
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationError, setGenerationError] = useState('')
   const [progressStep, setProgressStep] = useState('')
@@ -55,6 +67,25 @@ export function SessionDetailView({
     if (socketRef.current) {
       socketRef.current.close()
       socketRef.current = null
+    }
+  }
+
+  const handleStartPractice = async () => {
+    if (!selectedStage) {
+      return
+    }
+
+    const success = await startPractice(selectedStage.stage_order)
+    if (!success) {
+      // Error is already set in the hook
+    }
+  }
+
+  const handleStopPractice = async () => {
+    const success = await stopPractice()
+    if (success) {
+      setSelectedStage(null)
+      clearSession()
     }
   }
 
@@ -146,6 +177,57 @@ export function SessionDetailView({
     return null
   }
 
+  // Practice session is active - show the interview room
+  if (practiceSessions && selectedStage) {
+    return (
+      <PracticeSessionView
+        stage={selectedStage}
+        practiceSession={practiceSessions}
+        isLoading={practiceLoading}
+        onStop={() => void handleStopPractice()}
+        onBack={() => {
+          setSelectedStage(null)
+          clearSession()
+        }}
+      />
+    )
+  }
+
+  // Stage selected but practice not started yet
+  if (selectedStage && !practiceSessions) {
+    return (
+      <div className="detail-panel">
+        <div className="detail-panel__header">
+          <h3>{selectedStage.stage_name}</h3>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              setSelectedStage(null)
+              setGenerationError('')
+            }}
+          >
+            Back
+          </button>
+        </div>
+
+        <p className="detail-panel__text">{selectedStage.stage_description}</p>
+
+        {practiceError ? <div className="feedback error">{practiceError}</div> : null}
+
+        <button
+          type="button"
+          className="primary-btn"
+          onClick={() => void handleStartPractice()}
+          disabled={practiceLoading}
+        >
+          {practiceLoading ? 'Starting Interview…' : 'Start Interview Practice'}
+        </button>
+      </div>
+    )
+  }
+
+  // Normal state - show session details with stages
   return (
     <div className="detail-panel">
       <div className="detail-panel__header">
@@ -174,25 +256,40 @@ export function SessionDetailView({
       ) : null}
 
       {session.stages && session.stages.length > 0 ? (
-        <div className="stage-list">
-          {session.stages.map((stage) => (
-            <div key={`${stage.stage_order}-${stage.stage_name}`} className="stage-item">
-              <h4>{stage.stage_name}</h4>
-              <p>{stage.stage_description}</p>
-            </div>
-          ))}
+        <div>
+          <div className="stages-header">
+            <h4>Interview Stages</h4>
+            <span className="stages-count">{session.stages.length} stages</span>
+          </div>
+          <div className="stages-grid">
+            {session.stages.map((stage) => (
+              <StageItemCard
+                key={`${stage.stage_order}-${stage.stage_name}`}
+                stage={stage}
+                onSelect={(s) => setSelectedStage(s)}
+                isLoading={practiceLoading}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            className="primary-btn secondary"
+            onClick={() => void handleGenerateStages()}
+            disabled={isGenerating}
+          >
+            {isGenerating ? 'Regenerating…' : 'Regenerate Stages'}
+          </button>
         </div>
       ) : (
-        <button type="button" className="primary-btn" onClick={() => void handleGenerateStages()} disabled={isGenerating}>
-          {isGenerating ? 'Generating…' : 'Generate stages'}
+        <button
+          type="button"
+          className="primary-btn"
+          onClick={() => void handleGenerateStages()}
+          disabled={isGenerating}
+        >
+          {isGenerating ? 'Generating…' : 'Generate Stages'}
         </button>
       )}
-
-      {session.stages && session.stages.length > 0 ? (
-        <button type="button" className="primary-btn" onClick={() => void handleGenerateStages()} disabled={isGenerating}>
-          {isGenerating ? 'Generating…' : 'Regenerate stages'}
-        </button>
-      ) : null}
     </div>
   )
 }

@@ -121,7 +121,7 @@ async def stop_bot(
 
 
 
-@router.post("")
+@router.post("/{session_id}")
 async def create_practice_session(
     session_id: int,
     current_user: CurrentUser,
