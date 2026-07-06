@@ -140,18 +140,3 @@ async def delete_user(user_id: int, current_user: CurrentUser, db: DBSession):
     await db.commit()
 
 
-@router.get("/{user_id}", response_model=UserPublic)
-async def get_user(user_id: int, db: DBSession):
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
-    user = result.scalars().first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User Doesn't Exist."
-        )
-    return user
-
-
-@router.get("/{user_id}/sessions", response_model=list[SessionResponse])
-async def get_user_sessions(user_id: int, db: DBSession):
-    results = await get_sessions(db, user_id)
-    return results
