@@ -13,12 +13,10 @@ class InterviewStagePlan(BaseModel):
     stage_order: int = Field(..., description="The sequential order of the interview stage.")
     stage_name: str = Field(..., description="Name of the stage, e.g., 'System Design'.")
     stage_description: str = Field(..., description="Detailed instructions on what this specific stage covers.")
-    objective: str = Field(..., description="The core goal or target evaluation of this stage.")
+    cv_context: str = Field(..., description="Relevent Context from Candidate's CV for Interview stage generation.")
 
 class InterviewPlan(BaseModel):
-    candidate_summary: str = Field(..., description="A heavily compressed (~300 token) profile of the candidate containing core stack, strengths, and weaknesses.")
-    candidate_strengths: List[str] = Field(..., description="Key technical or soft strengths identified.")
-    candidate_weaknesses: List[str] = Field(..., description="Areas needing deeper evaluation or missing skills.")
+    candidate_summary: str = Field(..., description="A heavily compressed User profile of the candidate containing core stack, strengths, and weaknesses.")
     interview_focus: List[str] = Field(..., description="Core themes the entire interview process must target.")
     stages: List[InterviewStagePlan] = Field(..., description="The ordered list of planned interview stages.")
 
@@ -54,22 +52,24 @@ PLANNER_SYSTEM_PROMPT = """You are an expert Talent Acquisition Architect and Le
 Your job is to analyze a candidate's context (Resume, Job Description, Company Profile, and extra notes) and construct a tailored, strategic interview plan.
 
 Strict Rules:
-1. Synthesize and compress the candidate's background into a highly dense `candidate_summary` (roughly 200-300 tokens) focusing on core experience, standout projects, and tech stack match.
-2. Identify explicit strengths and gaps/weaknesses relative to the Job Description.
-3. Define an ordered sequence of focused interview stages. Do NOT generate interviewers or specific questions yet. Only define the metadata, description for each stage.
+1. Synthesize and compress the candidate's background into a highly dense `candidate_summary` (approximately 150-250 words) focusing on about the personal details and core experience.
+2. Define an ordered sequence of focused interview stages. Do NOT generate interviewers or specific questions yet. Only define the metadata, description for each stage.
+3. For every stage, extract only the CV context that is relevant to that stage. Populate the `cv_context` field with concise excerpts or summaries from the candidate CV.
 """
 
 STAGE_SYSTEM_PROMPT = """You are a specialized AI Interviewer Generator operating as a worker node.
 Your task is to take a high-level interview stage plan and flesh out a hyper-realistic interviewer persona along with targeted, high-signal questions.
 
 You will be given:
-- The compressed candidate profile (Summary, Strengths, Weaknesses)
+- The compressed candidate profile (Summary, CV context)
 - The specific Stage Info (Name, Description)
+- Global Interview Context (Full Interview Process Focus and Previous and Next Stages)
 
 Guidelines:
 1. Craft a distinct, realistic `interviewer_persona`. The persona must match the domain (e.g., a warm HR Specialist for Culture, a demanding Principal Architect for System Design).
 2. Generate highly contextual questions that directly cross-examine the candidate's resume/strengths or probe into their specific weaknesses within the scope of this stage.
 3. Every question must include an explicit `expected_behavior` playbook detailing what specific signals or anti-patterns to watch out for.
+4. Do not repeat topics relvent to previous or next stages.
 """ 
 
 class InterviewPlanner:
@@ -138,24 +138,52 @@ class StageGenerator:
             ### Compressed Candidate Summary:
             {candidate_summary}
             
+            ### CV Context
+            {cv_context}
+            
             ### Target Interview Stage Plan:
+            Stage Order: {stage_order}
             Stage Name: {stage_name}
             Description: {stage_description}
-            Objective: {objective}
+            ## Global Interview Info:
+            # **Previous Stages**: 
+            {prev_stages}
+            
+            # **Next Stages**: 
+            {next_stages}
+            
+            # **Interview Focus**: 
+            {interview_focus} 
             """)
         ])
         self.chain = self.prompt | self.model
 
     async def generate_stage_content(
-        self, candidate_summary: str, stage_plan: InterviewStagePlan
+        self, plan: InterviewPlan, stage_plan: InterviewStagePlan
     ) -> StageGeneration:
         # Add a retry mechanism to handle transient LLM parsing failures
         for attempt in range(self.max_retries + 1):
             result = await self.chain.ainvoke({
-                "candidate_summary": candidate_summary,
+                "candidate_summary": plan.candidate_summary,
+                "stage_order": stage_plan.stage_order,
                 "stage_name": stage_plan.stage_name,
                 "stage_description": stage_plan.stage_description,
-                "objective": stage_plan.objective
+                "cv_context": stage_plan.cv_context,
+                "prev_stages": [
+                    {
+                        "name": pre_stage.stage_name,
+                        "description": pre_stage.stage_description,
+                    } 
+                    for pre_stage in plan.stages
+                    if pre_stage.stage_order < stage_plan.stage_order],
+                "next_stages": [
+                    {
+                        "name": pre_stage.stage_name,
+                        "description": pre_stage.stage_description,
+                    }
+                    for pre_stage in plan.stages 
+                    if pre_stage.stage_order > stage_plan.stage_order],
+                "interview_focus": plan.interview_focus,
             })
             
             if result is not None:
@@ -190,10 +218,9 @@ class InterviewOrchestrator:
         async def worker(stage):
             async with semaphore:
                 return await self.stage_generator.generate_stage_content(
-                    plan.candidate_summary,
+                    plan,
                     stage,
                 )
-
         tasks = [worker(stage) for stage in plan.stages]
 
         generated_stages = await asyncio.gather(
