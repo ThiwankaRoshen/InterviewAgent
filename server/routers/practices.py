@@ -1,80 +1,17 @@
-# main.py
-import os
 import asyncio
-import httpx
-from fastapi import APIRouter, FastAPI, HTTPException, status
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, status 
 from loguru import logger
-import time 
 
+from daily_utils import create_daily_room, create_daily_token, delete_daily_room
 from bot_daily import run_bot_entrypoint
 from auth import CurrentUser
 from schemas import StartPracticeRequest, StartPracticeResponse, StopPracticeRequest
 import crud
 from database import DBSession
-from settings import settings
 
 active_bots = {}  # room_url -> task
 
-
-
-
 router = APIRouter()
-
-async def create_daily_token(room_name: str, is_owner: bool = True) -> str:
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{settings.DAILY_API_URL}/meeting-tokens",
-            headers={
-                "Authorization": f"Bearer {settings.DAILY_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "properties": {
-                    "room_name": room_name,
-                    "is_owner": is_owner,
-                    "exp": int(time.time()) + 3600,
-                }
-            }
-        )
-        response.raise_for_status()
-        return response.json()["token"]
-    
-async def create_daily_room() -> dict:
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{settings.DAILY_API_URL}/rooms",
-            headers={
-                "Authorization": f"Bearer {settings.DAILY_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "properties": {
-                    "enable_prejoin_ui": False,
-                    "enable_screenshare": False,
-                    "enable_chat": False,
-                    "start_video_off": True,
-                    "start_audio_off": False,
-                    "exp": int(time.time()) + 3600 ,
-                }
-            }
-        )
-        response.raise_for_status()
-        return response.json()
-
-
-async def delete_daily_room(room_url: str):
-    room_name = room_url.split("/")[-1]
-    async with httpx.AsyncClient() as client:
-        try:
-            await client.delete(
-                f"{settings.DAILY_API_URL}/rooms/{room_name}",
-                headers={"Authorization": f"Bearer {settings.DAILY_API_KEY}"}
-            )
-        except Exception as e:
-            logger.warning(f"Failed to delete room: {e}")
-
 
 @router.post("/start", response_model=StartPracticeResponse)
 async def start_bot(

@@ -1,16 +1,9 @@
-from asyncio import subprocess
-import os
-import sys
-import time
-
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status, Depends
-import httpx
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status, Depends
 from auth import CurrentUser
 from sqlalchemy import select 
 import models
 from database import DBSession
-import crud, schemas
-from settings import settings
+import crud, schemas 
 from services import create_interview_session_service
 from ws_connection_manager import manager
 
@@ -162,38 +155,4 @@ async def get_interview_plan(session_id: int, current_user: CurrentUser, db: DBS
 
  
 
-@router.patch(
-    "/{session_id}/feedback",
-    response_model=schemas.SessionEvaluationResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Submit wrap-up feedback to initiate Version 2 structural shifts",
-)
-def submit_session_feedback(
-    session_id: int, payload: schemas.SessionFeedbackUpdate, db: DBSession
-):
-    """
-    Updates the parent interview session configuration framework with core user feedback.
-    The next time they call `/sessions/{session_id}/generate-plan` (Step 3), the AI worker
-    will read this feedback field to generate tailored V2 Stages.
-    """
-    # 1. Commit modifications to SQLite
-    updated_session = crud.update_session_feedback(
-        db, session_id=session_id, feedback_data=payload
-    )
-    if not updated_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Interview Session setup {session_id} not found.",
-        )
 
-    # 2. Extract historical execution metrics for context analytics
-    attempt_count = crud.get_practice_runs_count(db, session_id=session_id)
-
-    # 3. Assemble full structure response
-    return schemas.SessionEvaluationResponse(
-        id=updated_session.id,
-        user_id=updated_session.user_id,
-        feedback=updated_session.feedback,
-        date_created=updated_session.date_created,
-        total_practice_runs=attempt_count,
-    )

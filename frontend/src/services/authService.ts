@@ -53,6 +53,36 @@ export async function getCurrentUser(token: string): Promise<UserProfile> {
   return response.json()
 }
 
+export async function updateUser(token: string, email?: string): Promise<UserProfile> {
+  const response = await fetch(`${API_BASE_URL}/api/users`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ email }),
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+
+  return response.json()
+}
+
+export async function deleteUser(token: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/users`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(await parseErrorMessage(response))
+  }
+}
+
 export function saveSession(token: string, email: string): void {
   localStorage.setItem(TOKEN_KEY, token)
   localStorage.setItem(USER_KEY, email)

@@ -1,12 +1,10 @@
 from typing import Annotated
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy import select, func
-from schemas import (
-    SessionResponse,
+from schemas import ( 
     UserUpdate,
     UserCreate,
-    UserPrivate,
-    UserPublic,
+    UserPrivate, 
     Token,
 )
 import models
@@ -15,7 +13,7 @@ from datetime import timedelta
 from fastapi.security import OAuth2PasswordRequestForm
 from auth import CurrentUser, create_access_token, hash_password, verify_password
 from database import DBSession
-from crud import get_user_cvs, get_sessions
+from crud import get_user_cvs
 from cv_utils import delete_cv_file
 from settings import settings
 
@@ -71,18 +69,12 @@ async def get_current_user(current_user: CurrentUser):
 
 
 @router.patch(
-    "/{user_id}", response_model=UserUpdate, status_code=status.HTTP_201_CREATED
+    "", response_model=UserUpdate, status_code=status.HTTP_201_CREATED
 )
 async def update_user_patch(
-    user_id: int, user: UserUpdate, current_user: CurrentUser, db: DBSession
-):
-    if user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not Authorized to update this profile.",
-        )
-
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
+    user: UserUpdate, current_user: CurrentUser, db: DBSession
+): 
+    result = await db.execute(select(models.User).where(models.User.id == current_user.id))
     existing_user = result.scalars().first()
     if not existing_user:
         raise HTTPException(
@@ -95,7 +87,7 @@ async def update_user_patch(
                 await db.execute(
                     select(models.User).where(
                         func.lower(models.User.email) == user.email.lower(),
-                        models.User.id != user_id,
+                        models.User.id != current_user.id,
                     )
                 )
             )
@@ -117,14 +109,9 @@ async def update_user_patch(
     return existing_user
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user_id: int, current_user: CurrentUser, db: DBSession):
-    if user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not Authorized to delete this profile.",
-        )
-    result = await db.execute(select(models.User).where(models.User.id == user_id))
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(current_user: CurrentUser, db: DBSession):
+    result = await db.execute(select(models.User).where(models.User.id == current_user.id))
     existing_user = result.scalars().first()
     if not existing_user:
         raise HTTPException(
@@ -132,7 +119,7 @@ async def delete_user(user_id: int, current_user: CurrentUser, db: DBSession):
             detail="User not Exist.",
         )
 
-    cv_paths = await get_user_cvs(db, user_id)
+    cv_paths = await get_user_cvs(db,  current_user.id)
     for cv_path in cv_paths:
         delete_cv_file(cv_path)
 

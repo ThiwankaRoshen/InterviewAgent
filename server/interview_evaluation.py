@@ -96,7 +96,7 @@ Interview:
 
     markdown_report = response.content
 
-    reports_dir = Path("medai/reports")
+    reports_dir = Path("media/reports")
     reports_dir.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
