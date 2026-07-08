@@ -84,7 +84,7 @@ class InterviewPlanResponse(BaseModel):
 
 
 class PracticeResponse(BaseModel):
-    practice_attempt_id: int
+    id: int
     room_url: str
     token: str
     status: str

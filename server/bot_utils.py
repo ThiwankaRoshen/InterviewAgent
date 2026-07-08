@@ -140,7 +140,7 @@ class ActiveInterviewState:
             "behaviour": behaviour,
             "answer_text": answer_text,
             "expected_behavior": "This was a Follow up by interviewer" if self.is_followup 
-                                    else self.master_questions[self.current_index]["expected_behaviour"],
+                                    else self.master_questions[self.current_index - 1]["expected_behavior"],
         })
 
         
