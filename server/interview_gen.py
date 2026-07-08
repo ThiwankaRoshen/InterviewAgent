@@ -1,32 +1,56 @@
 import json
+import operator
+from typing import List, Annotated, TypedDict, Optional
 
 from pydantic import BaseModel, Field
-from typing import List
-import asyncio 
 from langchain_core.runnables import Runnable
 from langchain_core.prompts import ChatPromptTemplate
+
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
+
 import schemas
 
 
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
 
-class InterviewStagePlan(BaseModel):
+class StageSkeleton(BaseModel):
+    """Bare-bones stage metadata, produced WITHOUT looking at the CV."""
     stage_order: int = Field(..., description="The sequential order of the interview stage.")
     stage_name: str = Field(..., description="Name of the stage, e.g., 'System Design'.")
     stage_description: str = Field(..., description="Detailed instructions on what this specific stage covers.")
-    cv_context: str = Field(..., description="Relevent Context from Candidate's CV for Interview stage generation.")
 
-class InterviewPlan(BaseModel):
-    candidate_summary: str = Field(..., description="A heavily compressed User profile of the candidate containing core stack, strengths, and weaknesses.")
+
+class InterviewPlanSkeleton(BaseModel):
+    """Output of the planner node. Deliberately CV-free."""
     interview_focus: List[str] = Field(..., description="Core themes the entire interview process must target.")
-    stages: List[InterviewStagePlan] = Field(..., description="The ordered list of planned interview stages.")
+    stages: List[StageSkeleton] = Field(..., description="The ordered list of planned interview stages.")
+
+
+class StageCvContext(BaseModel):
+    """Output of the per-stage CV-extraction worker."""
+    cv_context: str = Field(..., description="Concise, high-signal excerpts/summary from the candidate's CV relevant ONLY to this specific interview stage.")
+
+
+class InterviewStagePlan(BaseModel):
+    """A stage skeleton merged with its stage-specific CV context."""
+    stage_order: int
+    stage_name: str
+    stage_description: str
+    cv_context: str = Field(..., description="Relevant Context from Candidate's CV for this interview stage.")
+
 
 class InterviewQuestion(BaseModel):
     question: str = Field(..., description="The interview question text.")
     expected_behavior: str = Field(..., description="What a strong answer should demonstrate or contain.")
 
+
 class StageGeneration(BaseModel):
     interviewer_persona: str = Field(..., description="The dynamic persona profile for the interviewer of this stage.")
     questions_and_answers: List[InterviewQuestion] = Field(..., description="List of questions and expected answers tailored to this stage and the candidate profile.")
+
 
 class StageBase(BaseModel):
     stage_order: int
@@ -37,7 +61,7 @@ class StageBase(BaseModel):
 
 
 def stringify_stage(stage: StageBase) -> schemas.StageBase:
-    return  schemas.StageBase(
+    return schemas.StageBase(
         stage_order=stage.stage_order,
         stage_name=stage.stage_name,
         stage_description=stage.stage_description,
@@ -47,206 +71,347 @@ def stringify_stage(stage: StageBase) -> schemas.StageBase:
             indent=2,
         ),
     )
-    
+
+
+# ---------------------------------------------------------------------------
+# Prompts
+# ---------------------------------------------------------------------------
+
 PLANNER_SYSTEM_PROMPT = """You are an expert Talent Acquisition Architect and Lead Technical Recruiter.
-Your job is to analyze a candidate's context (Resume, Job Description, Company Profile, and extra notes) and construct a tailored, strategic interview plan.
+Your job is to analyze the Job Description, Company Profile, and extra notes and construct a tailored, strategic interview plan.
 
 Strict Rules:
-1. Synthesize and compress the candidate's background into a highly dense `candidate_summary` (approximately 150-250 words) focusing on about the personal details and core experience.
-2. Define an ordered sequence of focused interview stages. Do NOT generate interviewers or specific questions yet. Only define the metadata, description for each stage.
-3. For every stage, extract only the CV context that is relevant to that stage. Populate the `cv_context` field with concise excerpts or summaries from the candidate CV.
+1. Base the plan ONLY on the Job Description, Company Information, and Additional Notes. You do NOT have access to any specific candidate's CV at this stage, and must not assume one.
+2. Define `interview_focus`: the core themes the entire interview process must target, derived from the role's requirements.
+3. Define an ordered sequence of focused interview stages (`stage_order`, `stage_name`, `stage_description`). Do NOT generate interviewers or specific questions yet, and do NOT reference any candidate-specific content.
+"""
+
+CV_CONTEXT_SYSTEM_PROMPT = """You are a specialized CV Analyst operating as a worker node in a larger interview-generation pipeline.
+Your only job is to read the candidate's full CV and extract the subset of content that is directly relevant to ONE specific interview stage.
+
+You will be given:
+- The full candidate CV text
+- The name and description of a single interview stage
+
+Guidelines:
+1. Extract and condense only the CV content relevant to this stage's topic and scope (e.g. name of the candidate, relevent projects, roles, skills, achievements, gaps).
+2. Do not include content irrelevant to this stage, and do not try to summarize the entire CV.
+3. Output should be dense, factual, high-signal excerpts an interviewer can act on directly for this stage only.
 """
 
 STAGE_SYSTEM_PROMPT = """You are a specialized AI Interviewer Generator operating as a worker node.
-Your task is to take a high-level interview stage plan and flesh out a hyper-realistic interviewer persona along with targeted, high-signal questions.
+Your task is to take a fully-scoped interview stage (including the CV context already extracted for it) and flesh out a hyper-realistic interviewer persona along with targeted, high-signal questions.
 
 You will be given:
-- The compressed candidate profile (Summary, CV context)
 - The specific Stage Info (Name, Description)
-- Global Interview Context (Full Interview Process Focus and Previous and Next Stages)
+- The CV context already extracted specifically for this stage
+- Global Interview Context (Full Interview Process Focus and Previous and Next Stage names/descriptions)
 
 Guidelines:
 1. Craft a distinct, realistic `interviewer_persona`. The persona must match the domain (e.g., a warm HR Specialist for Culture, a demanding Principal Architect for System Design).
-2. Generate highly contextual questions that directly cross-examine the candidate's resume/strengths or probe into their specific weaknesses within the scope of this stage.
+2. Generate highly contextual questions that directly cross-examine the candidate's resume/strengths or probe into their specific weaknesses, using the CV context provided for this stage.
 3. Every question must include an explicit `expected_behavior` playbook detailing what specific signals or anti-patterns to watch out for.
-4. Do not repeat topics relvent to previous or next stages.
-""" 
+4. Do not repeat topics relevant to previous or next stages (you're only given previous and next stages names/descriptions, not their CV context, to keep this stage self-contained).
+"""
 
-class InterviewPlanner:
-    def __init__(self, structured_llm: Runnable):
-        """
-        structured_llm must be an LLM instance already bound with 
-        .with_structured_output(InterviewPlan)
-        """
+
+# ---------------------------------------------------------------------------
+# Graph state definitions
+# ---------------------------------------------------------------------------
+
+class OverallState(TypedDict):
+    # Inputs
+    cv_text: str
+    jd_text: str
+    company_info: str
+    additional_notes: str
+
+    # Phase 1 output (planner, CV-free)
+    interview_focus: List[str]
+    stage_skeletons: List[StageSkeleton]
+
+    # Phase 2 output (accumulated from parallel per-stage CV extraction)
+    stage_plans: Annotated[List[InterviewStagePlan], operator.add]
+    ordered_stage_plans: List[InterviewStagePlan]
+
+    # Phase 3 output (accumulated from parallel stage-content generation)
+    generated_stages: Annotated[List[StageBase], operator.add]
+
+    # Final, order-sorted output
+    final_pipeline: List[StageBase]
+
+
+class CvContextWorkerState(TypedDict):
+    """Private state for each parallel CV-extraction branch."""
+    cv_text: str
+    stage_skeleton: StageSkeleton
+
+
+class StageContentWorkerState(TypedDict):
+    """Private state for each parallel stage-content-generation branch."""
+    stage_plan: InterviewStagePlan
+    interview_focus: List[str]
+    prev_stages: List[dict]
+    next_stages: List[dict]
+
+
+# ---------------------------------------------------------------------------
+# Chain builders
+# ---------------------------------------------------------------------------
+
+class PlannerChain:
+    """Produces interview_focus + stage skeletons from JD/company/notes only."""
+
+    def __init__(self, structured_llm: Runnable, max_retries: int = 2):
         self.model = structured_llm
-        self.max_retries = 2  # Number of retries for LLM calls
+        self.max_retries = max_retries
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", PLANNER_SYSTEM_PROMPT),
             ("user", """
-            ### Candidate CV:
-            {cv_text}
-            
             ### Job Description:
             {jd_text}
-            
+
             ### Company Information:
             {company_info}
-            
+
             ### Additional Context/Notes:
             {additional_notes}
             """)
         ])
-        # Build an execution chain
         self.chain = self.prompt | self.model
 
-    async def plan_interview(
-        self, cv_text: str, jd_text: str, company_info: str, additional_notes: str
-    ) -> InterviewPlan:
-        
-        # Add a retry mechanism to handle transient LLM parsing failures
-        for attempt in range(self.max_retries + 1):
+    async def invoke(self, jd_text: str, company_info: str, additional_notes: str) -> InterviewPlanSkeleton:
+        for _ in range(self.max_retries + 1):
             result = await self.chain.ainvoke({
-                "cv_text": cv_text,
                 "jd_text": jd_text,
                 "company_info": company_info,
-                "additional_notes": additional_notes
+                "additional_notes": additional_notes,
             })
-            
-            if result is None:
-                raise ValueError("Model returned None")
-            
-            return result
-        
-        raise ValueError(
-            f"StageGenerator LLM returned None for Planning after {self.max_retries + 1} attempts. "
-            "This usually happens when the model fails to use the required tool/function calling. " 
-        )
-         
-          
+            if result is not None:
+                return result
+        raise ValueError("Planner LLM returned None after retries. This usually happens when the model fails to use the required tool/function calling.")
 
-class StageGenerator:
-    def __init__(self, structured_llm: Runnable):
-        """
-        structured_llm must be an LLM instance already bound with 
-        .with_structured_output(StageGeneration)
-        """
+
+class CvContextChain:
+    """Extracts stage-specific high-signal CV context, one stage at a time."""
+
+    def __init__(self, structured_llm: Runnable, max_retries: int = 2):
         self.model = structured_llm
-        self.max_retries = 2  # Number of retries for LLM calls
+        self.max_retries = max_retries
         self.prompt = ChatPromptTemplate.from_messages([
-            ("system", STAGE_SYSTEM_PROMPT),
+            ("system", CV_CONTEXT_SYSTEM_PROMPT),
             ("user", """
-            ### Compressed Candidate Summary:
-            {candidate_summary}
-            
-            ### CV Context
-            {cv_context}
-            
-            ### Target Interview Stage Plan:
-            Stage Order: {stage_order}
+            ### Candidate CV:
+            {cv_text}
+
+            ### Target Interview Stage:
             Stage Name: {stage_name}
             Description: {stage_description}
-            ## Global Interview Info:
-            # **Previous Stages**: 
-            {prev_stages}
-            
-            # **Next Stages**: 
-            {next_stages}
-            
-            # **Interview Focus**: 
-            {interview_focus} 
             """)
         ])
         self.chain = self.prompt | self.model
 
-    async def generate_stage_content(
-        self, plan: InterviewPlan, stage_plan: InterviewStagePlan
-    ) -> StageGeneration:
-        # Add a retry mechanism to handle transient LLM parsing failures
-        for attempt in range(self.max_retries + 1):
+    async def invoke(self, cv_text: str, stage_skeleton: StageSkeleton) -> StageCvContext:
+        for _ in range(self.max_retries + 1):
             result = await self.chain.ainvoke({
-                "candidate_summary": plan.candidate_summary,
+                "cv_text": cv_text,
+                "stage_name": stage_skeleton.stage_name,
+                "stage_description": stage_skeleton.stage_description,
+            })
+            if result is not None:
+                return result
+        raise ValueError(
+            f"CvContextChain LLM returned None for stage '{stage_skeleton.stage_name}' after {self.max_retries + 1} attempts."
+        )
+
+
+class StageChain:
+    """Generates interviewer persona + questions for one already-scoped stage."""
+
+    def __init__(self, structured_llm: Runnable, max_retries: int = 2):
+        self.model = structured_llm
+        self.max_retries = max_retries
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", STAGE_SYSTEM_PROMPT),
+            ("user", """
+            ### Target Interview Stage Plan:
+            Stage Order: {stage_order}
+            Stage Name: {stage_name}
+            Description: {stage_description}
+
+            ### CV Context (extracted specifically for this stage):
+            {cv_context}
+
+            ## Global Interview Info:
+            # **Previous Stages**:
+            {prev_stages}
+
+            # **Next Stages**:
+            {next_stages}
+
+            # **Interview Focus**:
+            {interview_focus}
+            """)
+        ])
+        self.chain = self.prompt | self.model
+
+    async def invoke(
+        self,
+        stage_plan: InterviewStagePlan,
+        interview_focus: List[str],
+        prev_stages: List[dict],
+        next_stages: List[dict],
+    ) -> StageGeneration:
+        for _ in range(self.max_retries + 1):
+            result = await self.chain.ainvoke({
                 "stage_order": stage_plan.stage_order,
                 "stage_name": stage_plan.stage_name,
                 "stage_description": stage_plan.stage_description,
                 "cv_context": stage_plan.cv_context,
-                "prev_stages": [
-                    {
-                        "name": pre_stage.stage_name,
-                        "description": pre_stage.stage_description,
-                    } 
-                    for pre_stage in plan.stages
-                    if pre_stage.stage_order < stage_plan.stage_order],
-                "next_stages": [
-                    {
-                        "name": pre_stage.stage_name,
-                        "description": pre_stage.stage_description,
-                    }
-                    for pre_stage in plan.stages 
-                    if pre_stage.stage_order > stage_plan.stage_order],
-                "interview_focus": plan.interview_focus,
+                "prev_stages": prev_stages,
+                "next_stages": next_stages,
+                "interview_focus": interview_focus,
             })
-            
             if result is not None:
                 return result
-                
         raise ValueError(
             f"StageGenerator LLM returned None for stage '{stage_plan.stage_name}' after {self.max_retries + 1} attempts. "
-            "This usually happens when the model fails to use the required tool/function calling. " 
+            "This usually happens when the model fails to use the required tool/function calling."
         )
 
 
+# ---------------------------------------------------------------------------
+# Graph builder
+# ---------------------------------------------------------------------------
+
+def build_interview_graph(planner_llm: Runnable, cv_context_llm: Runnable, stage_llm: Runnable):
+    """
+    planner_llm       must be bound with .with_structured_output(InterviewPlanSkeleton)
+    cv_context_llm    must be bound with .with_structured_output(StageCvContext)
+    stage_llm         must be bound with .with_structured_output(StageGeneration)
+    """
+    planner_chain = PlannerChain(planner_llm)
+    cv_context_chain = CvContextChain(cv_context_llm)
+    stage_chain = StageChain(stage_llm)
+
+    # --- Phase 1: sequential, CV-free planning ------------------------------
+    async def plan_stages_node(state: OverallState) -> dict:
+        skeleton = await planner_chain.invoke(
+            jd_text=state["jd_text"],
+            company_info=state["company_info"],
+            additional_notes=state["additional_notes"],
+        )
+        print(f"Generated Interview Plan Skeleton: {skeleton}")
+        return {
+            "interview_focus": skeleton.interview_focus,
+            "stage_skeletons": skeleton.stages,
+        }
+
+    # --- Phase 2 fan-out: one CV-extraction call per stage, in parallel -----
+    def fan_out_to_cv_context(state: OverallState) -> List[Send]:
+        return [
+            Send("extract_cv_context", {"cv_text": state["cv_text"], "stage_skeleton": skeleton})
+            for skeleton in state["stage_skeletons"]
+        ]
+
+    async def extract_cv_context_node(state: CvContextWorkerState) -> dict:
+        skeleton = state["stage_skeleton"]
+        extracted = await cv_context_chain.invoke(state["cv_text"], skeleton)
+        stage_plan = InterviewStagePlan(
+            stage_order=skeleton.stage_order,
+            stage_name=skeleton.stage_name,
+            stage_description=skeleton.stage_description,
+            cv_context=extracted.cv_context,
+        )
+        return {"stage_plans": [stage_plan]}
+
+    # --- Join point after phase 2: restore stage order ----------------------
+    async def assemble_plan_node(state: OverallState) -> dict:
+        ordered = sorted(state["stage_plans"], key=lambda s: s.stage_order)
+        return {"ordered_stage_plans": ordered}
+
+    # --- Phase 3 fan-out: one content-generation call per stage, in parallel
+    def fan_out_to_stage_generation(state: OverallState) -> List[Send]:
+        ordered = state["ordered_stage_plans"]
+        sends = []
+        for stage_plan in ordered:
+            prev_stages = [
+                {"name": s.stage_name, "description": s.stage_description}
+                for s in ordered if s.stage_order < stage_plan.stage_order
+            ]
+            next_stages = [
+                {"name": s.stage_name, "description": s.stage_description}
+                for s in ordered if s.stage_order > stage_plan.stage_order
+            ]
+            sends.append(Send("generate_stage", {
+                "stage_plan": stage_plan,
+                "interview_focus": state["interview_focus"],
+                "prev_stages": prev_stages,
+                "next_stages": next_stages,
+            }))
+        return sends
+
+    async def generate_stage_node(state: StageContentWorkerState) -> dict:
+        stage_plan = state["stage_plan"]
+        generated_content = await stage_chain.invoke(
+            stage_plan=stage_plan,
+            interview_focus=state["interview_focus"],
+            prev_stages=state["prev_stages"],
+            next_stages=state["next_stages"],
+        )
+        merged_stage = StageBase(
+            stage_order=stage_plan.stage_order,
+            stage_name=stage_plan.stage_name,
+            stage_description=stage_plan.stage_description,
+            interviewer_persona=generated_content.interviewer_persona,
+            questions_and_answers=generated_content.questions_and_answers,
+        )
+        return {"generated_stages": [merged_stage]}
+
+    # --- Final join: restore stage order for the response -------------------
+    async def finalize_node(state: OverallState) -> dict:
+        ordered = sorted(state["generated_stages"], key=lambda s: s.stage_order)
+        print(f"Final Interview Pipeline: {ordered}")
+        return {"final_pipeline": ordered}
+
+    graph = StateGraph(OverallState)
+    graph.add_node("plan_stages", plan_stages_node)
+    graph.add_node("extract_cv_context", extract_cv_context_node)
+    graph.add_node("assemble_plan", assemble_plan_node)
+    graph.add_node("generate_stage", generate_stage_node)
+    graph.add_node("finalize", finalize_node)
+
+    graph.add_edge(START, "plan_stages")
+    graph.add_conditional_edges("plan_stages", fan_out_to_cv_context, ["extract_cv_context"])
+    graph.add_edge("extract_cv_context", "assemble_plan")
+    graph.add_conditional_edges("assemble_plan", fan_out_to_stage_generation, ["generate_stage"])
+    graph.add_edge("generate_stage", "finalize")
+    graph.add_edge("finalize", END)
+
+    return graph.compile()
+
+
+# ---------------------------------------------------------------------------
+# Thin orchestrator wrapper, mirrors the previous class's public interface
+# ---------------------------------------------------------------------------
+
 class InterviewOrchestrator:
-    def __init__(self, planner_llm, stage_llm):
-        self.planner = InterviewPlanner(planner_llm)
-        self.stage_generator = StageGenerator(stage_llm)
+    def __init__(self, planner_llm: Runnable, cv_context_llm: Runnable, stage_llm: Runnable):
+        self.app = build_interview_graph(planner_llm, cv_context_llm, stage_llm)
 
     async def run_pipeline(
         self, cv_text: str, jd_text: str, company_info: str, additional_notes: str
     ) -> List[StageBase]:
-        
-        # Phase 1: Sequential Planning call
-        plan: InterviewPlan = await self.planner.plan_interview(
-            cv_text=cv_text, 
-            jd_text=jd_text, 
-            company_info=company_info, 
-            additional_notes=additional_notes
-        )
-        print(f"Generated Interview Plan: {plan}")
-        
-        semaphore = asyncio.Semaphore(3)
-
-        async def worker(stage):
-            async with semaphore:
-                return await self.stage_generator.generate_stage_content(
-                    plan,
-                    stage,
-                )
-        tasks = [worker(stage) for stage in plan.stages]
-
-        generated_stages = await asyncio.gather(
-            *tasks,
-            return_exceptions=True,
-        )
-        
-        # Phase 2: Parallelizing worker execution with asyncio.gather
-        # tasks = [
-        #     self.stage_generator.generate_stage_content(plan.candidate_summary, stage)
-        #     for stage in plan.stages
-        # ]
-        
-        # generated_stages: List[StageGeneration] = await asyncio.gather(*tasks)
-        print(f"Generated Stage Content: {generated_stages}")
-        
-        # Phase 3: Zipping structural plans with dynamic content
-        final_interview_pipeline: List[StageBase] = []
-        for stage_plan, generated_content in zip(plan.stages, generated_stages):
-            merged_stage = StageBase(
-                stage_order=stage_plan.stage_order,
-                stage_name=stage_plan.stage_name,
-                stage_description=stage_plan.stage_description,
-                interviewer_persona=generated_content.interviewer_persona,
-                questions_and_answers=generated_content.questions_and_answers
-            )
-            final_interview_pipeline.append(merged_stage)
-        print(f"Final Interview Pipeline: {final_interview_pipeline}")
-        return final_interview_pipeline
+        result = await self.app.ainvoke({
+            "cv_text": cv_text,
+            "jd_text": jd_text,
+            "company_info": company_info,
+            "additional_notes": additional_notes,
+            "interview_focus": [],
+            "stage_skeletons": [],
+            "stage_plans": [],
+            "ordered_stage_plans": [],
+            "generated_stages": [],
+            "final_pipeline": [],
+        })
+        return result["final_pipeline"]

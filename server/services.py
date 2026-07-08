@@ -9,7 +9,7 @@ from langchain_openai import ChatOpenAI
 
 import models
 from cv_parser import parse_using_pymupdf, LangChainResumeParser
-from interview_gen import InterviewOrchestrator, InterviewPlan, StageGeneration, stringify_stage
+from interview_gen import InterviewOrchestrator, InterviewPlan, InterviewPlanSkeleton, StageCvContext, StageGeneration, stringify_stage
 from settings import settings
 from ws_connection_manager import manager
 
@@ -35,10 +35,13 @@ async def create_interview_session_service(
         mistral_api_key=settings.MISTRAL_API_KEY
     )
     
-    planner_llm = base_llm.with_structured_output(InterviewPlan)
+    planner_llm = base_llm.with_structured_output(InterviewPlanSkeleton)
+    cv_context_llm = base_llm.with_structured_output(StageCvContext)
     stage_llm = base_llm.with_structured_output(StageGeneration)
+    
     orchestrator = InterviewOrchestrator(
         planner_llm=planner_llm,
+        cv_context_llm=cv_context_llm,
         stage_llm=stage_llm
     )
     
