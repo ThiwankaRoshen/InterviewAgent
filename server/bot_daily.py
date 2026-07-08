@@ -15,8 +15,11 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
     LLMAssistantAggregatorParams
-) 
-from pipecat.utils.context.llm_context_summarization import LLMContextSummaryConfig
+)  
+from pipecat.utils.context.llm_context_summarization import (
+    LLMAutoContextSummarizationConfig,
+    LLMContextSummaryConfig,
+)
 
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.services.assemblyai.stt import AssemblyAISTTService
@@ -113,12 +116,16 @@ async def run_bot(
         context,
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(),
-        ),
+        ), 
         assistant_params=LLMAssistantAggregatorParams(
             enable_auto_context_summarization=True,
-            auto_context_summarization_config=LLMContextSummaryConfig(
-                target_context_tokens=2000,   # summary size budget
-                min_messages_after_summary=2, # always keep last N messages raw
+            auto_context_summarization_config=LLMAutoContextSummarizationConfig(
+                max_context_tokens=4000,        # trigger: token threshold
+                max_unsummarized_messages=10,   # trigger: message-count threshold
+                summary_config=LLMContextSummaryConfig(
+                    target_context_tokens=3000,      # output: summary size budget
+                    min_messages_after_summary=2,    # output: keep last N raw
+                ),
             ),
         ),
     )
