@@ -20,7 +20,8 @@ class StageSkeleton(BaseModel):
     """Bare-bones stage metadata, produced WITHOUT looking at the CV."""
     stage_order: int = Field(..., description="The sequential order of the interview stage.")
     stage_name: str = Field(..., description="Name of the stage, e.g., 'System Design'.")
-    stage_description: str = Field(..., description="Detailed instructions on what this specific stage covers.")
+    stage_description: str = Field(..., description="Detailed instructions on what and How this specific stage covers.")
+    stage_requirements: list[str] = Field(..., description="Constraints for a given stage.")
 
 
 class InterviewPlanSkeleton(BaseModel):
@@ -40,6 +41,7 @@ class InterviewStagePlan(BaseModel):
     stage_name: str
     stage_description: str
     cv_context: str = Field(..., description="Relevant Context from Candidate's CV for this interview stage.")
+    stage_requirements: list[str]
 
 
 class InterviewQuestion(BaseModel):
@@ -84,6 +86,8 @@ Strict Rules:
 1. Base the plan ONLY on the Job Description, Company Information, and Additional Notes. You do NOT have access to any specific candidate's CV at this stage, and must not assume one.
 2. Define `interview_focus`: the core themes the entire interview process must target, derived from the role's requirements.
 3. Define an ordered sequence of focused interview stages (`stage_order`, `stage_name`, `stage_description`). Do NOT generate interviewers or specific questions yet, and do NOT reference any candidate-specific content.
+4. Remember to extract any explicit constraints mentioned in the context (e.g. number of questions per stage). Store any such constraint for a given stage in that stage's `stage_requirements` field. If nothing specific was stated for a stage, leave `stage_requirements` as null — do not invent constraints.
+
 """
 
 CV_CONTEXT_SYSTEM_PROMPT = """You are a specialized CV Analyst operating as a worker node in a larger interview-generation pipeline.
@@ -112,6 +116,8 @@ Guidelines:
 2. Generate highly contextual questions that directly cross-examine the candidate's resume/strengths or probe into their specific weaknesses, using the CV context provided for this stage.
 3. Every question must include an explicit `expected_behavior` playbook detailing what specific signals or anti-patterns to watch out for.
 4. Do not repeat topics relevant to previous or next stages (you're only given previous and next stages names/descriptions, not their CV context, to keep this stage self-contained).
+5. If `stage_requirements` is provided, treat it as a hard constraint (e.g. an exact question count or a required format) and follow it exactly. If it is null, use your own judgement for scope and question count.
+
 """
 
 
@@ -238,7 +244,8 @@ class StageChain:
             Stage Order: {stage_order}
             Stage Name: {stage_name}
             Description: {stage_description}
-
+            Stage Requirements: {stage_requirements}
+            
             ### CV Context (extracted specifically for this stage):
             {cv_context}
 
@@ -267,6 +274,7 @@ class StageChain:
                 "stage_order": stage_plan.stage_order,
                 "stage_name": stage_plan.stage_name,
                 "stage_description": stage_plan.stage_description,
+                "stage_requirements": stage_plan.stage_requirements,
                 "cv_context": stage_plan.cv_context,
                 "prev_stages": prev_stages,
                 "next_stages": next_stages,
@@ -321,6 +329,7 @@ def build_interview_graph(planner_llm: Runnable, cv_context_llm: Runnable, stage
             stage_order=skeleton.stage_order,
             stage_name=skeleton.stage_name,
             stage_description=skeleton.stage_description,
+            stage_requirements=skeleton.stage_requirements,
             cv_context=extracted.cv_context,
         )
         return {"stage_plans": [stage_plan]}
