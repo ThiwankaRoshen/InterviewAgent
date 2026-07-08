@@ -19,7 +19,6 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    
 
 
 class Session(Base):
@@ -31,29 +30,29 @@ class Session(Base):
     company_info: Mapped[str] = mapped_column(Text, nullable=False)
     additional_info: Mapped[str] = mapped_column(Text, nullable=True, default="")
     feedback: Mapped[str] = mapped_column(Text, nullable=True, default="")
-    
+
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"),
         nullable=False,
         index=True,
     )
+
     date_created: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
     )
 
     user: Mapped["User"] = relationship(back_populates="sessions")
+
     stages: Mapped[list["Stage"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
     )
-    practice_sessions: Mapped[list["PracticeSession"]] = relationship(
-        back_populates="session",
-        cascade="all, delete-orphan",
-    )
+
     @property
     def cv_file_path(self) -> str:
         return f"media/cv_files/{self.cv_file_name}"
+
 
 class Stage(Base):
     __tablename__ = "stages"
@@ -73,41 +72,46 @@ class Stage(Base):
 
     session: Mapped["Session"] = relationship(back_populates="stages")
 
+    practice_attempts: Mapped[list["PracticeAttempt"]] = relationship(
+        back_populates="stage",
+        cascade="all, delete-orphan",
+    )
 
-class PracticeSession(Base):
-    __tablename__ = "practice_sessions"
+
+class PracticeAttempt(Base):
+    __tablename__ = "practice_attempts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    session_id: Mapped[int] = mapped_column(
-        ForeignKey("sessions.id"),
+
+    stage_id: Mapped[int] = mapped_column(
+        ForeignKey("stages.id"),
         nullable=False,
         index=True,
     )
+    
+    room_url: Mapped[str] = mapped_column(Text, nullable=False)
+    token: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="STARTED",
+        nullable=False,
+    )
+    @property
+    def md_results_path(self) -> str:
+        return f"media/reports/practice_{self.id}.md"
+    @property
+    def pdf_results_path(self) -> str:
+        return f"media/reports/practice_{self.id}.pdf"
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
     )
 
-    session: Mapped["Session"] = relationship(back_populates="practice_sessions")
-    practice_stages: Mapped[list["PracticeStage"]] = relationship(
-        back_populates="practice_session",
-        cascade="all, delete-orphan",
-    )
+    stage: Mapped["Stage"] = relationship(back_populates="practice_attempts")
 
-
-class PracticeStage(Base):
-    __tablename__ = "practice_stages"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    practice_session_id: Mapped[int] = mapped_column(
-        ForeignKey("practice_sessions.id"),
-        nullable=False,
-        index=True,
-    )
-
-    practice_session: Mapped["PracticeSession"] = relationship(back_populates="practice_stages")
     answers: Mapped[list["Answer"]] = relationship(
-        back_populates="practice_stage",
+        back_populates="practice_attempt",
         cascade="all, delete-orphan",
     )
 
@@ -116,14 +120,18 @@ class Answer(Base):
     __tablename__ = "answers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    practice_stage_id: Mapped[int] = mapped_column(
-        ForeignKey("practice_stages.id"),
+
+    practice_attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("practice_attempts.id"),
         nullable=False,
         index=True,
     )
+
     question_order: Mapped[int] = mapped_column(Integer, nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
     behaviour: Mapped[str] = mapped_column(Text, nullable=False)
     answer_text: Mapped[str] = mapped_column(Text, nullable=False)
 
-    practice_stage: Mapped["PracticeStage"] = relationship(back_populates="answers")
+    practice_attempt: Mapped["PracticeAttempt"] = relationship(
+        back_populates="answers"
+    )
