@@ -74,7 +74,7 @@ Evaluation Focus:
 4. FOLLOW-UP QUESTIONS:
    - Only create follow-up questions when the candidate answer requires clarification.
    - Follow-ups must not replace planned questions.
-   - After a follow-up, return to the planned question sequence.
+   - After a follow-up, Call `submit_answer_and_metrics` and return to the planned question sequence.
 
 5. STRICT SEQUENCE:
    - The predefined question order must never change.
@@ -115,7 +115,11 @@ class ActiveInterviewState:
         
         self.current_index = 0
         self.answers_log: List[Dict[str, Any]] = []
+        self.is_followup = False
         
+    def set_followup(self):
+        self.is_followup = True
+    
     def get_current_question(self) -> Optional[Dict[str, Any]]:
         """Returns the current master question tracking metadata."""
         if self.current_index < len(self.master_questions):
@@ -124,16 +128,19 @@ class ActiveInterviewState:
 
     def advance_question(self):
         """Moves the pointer forward to the next master question."""
+        self.is_followup = False
         self.current_index += 1
 
     def log_response(self,  question_text: str, answer_text: str, behaviour: str):
         """Appends an execution record to RAM."""
+        
         self.answers_log.append({ 
             "question_order": len(self.answers_log) + 1,
             "question_text": question_text,
             "behaviour": behaviour,
             "answer_text": answer_text,
-            "expected_behavior": self.master_questions[self.current_index]["expected_behaviour"],
+            "expected_behavior": "This was a Follow up by interviewer" if self.is_followup 
+                                    else self.master_questions[self.current_index]["expected_behaviour"],
         })
 
         
@@ -165,6 +172,7 @@ def make_interview_tools(active_session: ActiveInterviewState):
          
     async def inject_followup_question(params: FunctionCallParams):
         a = params.arguments
+        active_session.set_followup()
         await params.result_callback({
             "status": "acknowledged",
             "instruction": f"Proceed to speak this follow-up question directly to candidate: {a['followup_text']}",
