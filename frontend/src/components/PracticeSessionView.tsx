@@ -52,8 +52,20 @@ export function PracticeSessionView({
             <code className="practice-session__detail-value">{practiceSession.roomUrl.split('/').pop()}</code>
           </div>
           <div className="practice-session__detail-item">
-            <span className="practice-session__detail-label">Stage ID:</span>
-            <code className="practice-session__detail-value">{practiceSession.stageId}</code>
+            <span className="practice-session__detail-label">Practice attempt:</span>
+            <code className="practice-session__detail-value">{practiceSession.practiceAttemptId}</code>
+          </div>
+          <div className="practice-session__detail-item">
+            <span className="practice-session__detail-label">Status:</span>
+            <code className="practice-session__detail-value">{practiceSession.status}</code>
+          </div>
+          <div className="practice-session__detail-item">
+            <span className="practice-session__detail-label">Markdown report:</span>
+            <code className="practice-session__detail-value">{practiceSession.mdResultsPath}</code>
+          </div>
+          <div className="practice-session__detail-item">
+            <span className="practice-session__detail-label">PDF report:</span>
+            <code className="practice-session__detail-value">{practiceSession.pdfResultsPath}</code>
           </div>
         </div>
 

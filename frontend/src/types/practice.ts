@@ -1,13 +1,18 @@
 export interface StartPracticeResponse {
-  practice_session_id: number
-  stage_id: number
+  practice_attempt_id: number
   room_url: string
   token: string
+  status: string
+  md_results_path: string
+  pdf_results_path: string
 }
 
 export interface PracticeSession {
   stageId: number
-  practiceSessionId: number
+  practiceAttemptId: number
   roomUrl: string
   token: string
+  status: string
+  mdResultsPath: string
+  pdfResultsPath: string
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createPracticeSession, startPracticeSession, stopPracticeSession } from '../services/practiceService'
+import { startPracticeSession, stopPracticeSession } from '../services/practiceService'
 import type { PracticeSession } from '../types/practice'
 
 interface UsePracticeSessionOptions {
@@ -7,7 +7,7 @@ interface UsePracticeSessionOptions {
   sessionId: number
 }
 
-export function usePracticeSession({ token, sessionId }: UsePracticeSessionOptions) {
+export function usePracticeSession({ token }: UsePracticeSessionOptions) {
   const [practiceSessions, setPracticeSessions] = useState<PracticeSession | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -22,14 +22,16 @@ export function usePracticeSession({ token, sessionId }: UsePracticeSessionOptio
     setError('')
 
     try {
-      const practiceSessionId = await createPracticeSession(token, sessionId)
-      const response = await startPracticeSession(token, stageId, practiceSessionId)
+      const response = await startPracticeSession(token, stageId)
 
       setPracticeSessions({
-        stageId: response.stage_id,
-        practiceSessionId: response.practice_session_id,
+        stageId,
+        practiceAttemptId: response.practice_attempt_id,
         roomUrl: response.room_url,
         token: response.token,
+        status: response.status,
+        mdResultsPath: response.md_results_path,
+        pdfResultsPath: response.pdf_results_path,
       })
 
       return true
@@ -51,7 +53,7 @@ export function usePracticeSession({ token, sessionId }: UsePracticeSessionOptio
     setError('')
 
     try {
-      await stopPracticeSession(token, practiceSessions.roomUrl)
+      await stopPracticeSession(token, practiceSessions.practiceAttemptId)
       setPracticeSessions(null)
       return true
     } catch (err) {
