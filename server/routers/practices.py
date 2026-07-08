@@ -20,7 +20,7 @@ async def start_bot(
     currentUser: CurrentUser,
     ):
     
-    practice_attempt = await crud.get_practice_attempt(practice_attempt_id, db)
+    practice_attempt = await crud.get_practice_attempt(db, practice_attempt_id)
     
     if not practice_attempt:
         raise HTTPException(
@@ -93,7 +93,7 @@ async def stop_bot(
     db: DBSession,
     currentUser: CurrentUser,
     ):
-    practice_attempt = await crud.get_practice_attempt(practice_attempt_id, db)
+    practice_attempt = await crud.get_practice_attempt(db, practice_attempt_id)
     
     if not practice_attempt:
         raise HTTPException(
@@ -101,13 +101,13 @@ async def stop_bot(
             detail=f"practice attempt with ID {practice_attempt} does not exist.",
         )
     
-    if not crud.practice_attempt_own_by(currentUser.id):
+    if not (await crud.practice_attempt_owned_by(db, practice_attempt_id, currentUser.id)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to stop Practice Attempt.",
         )
         
-    practice_attempt = await crud.stop_practice_attempt(practice_attempt_id)
+    practice_attempt = await crud.stop_practice_attempt(db, practice_attempt_id)
     active_bots.pop(practice_attempt.room_url).cancel()
     await delete_daily_room(practice_attempt.room_url)
     return {"status": "stopped"}

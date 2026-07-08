@@ -9,7 +9,7 @@ from langchain_openai import ChatOpenAI
 
 import models
 from cv_parser import parse_using_pymupdf, LangChainResumeParser
-from interview_gen import InterviewOrchestrator, InterviewPlan, InterviewPlanSkeleton, StageCvContext, StageGeneration, stringify_stage
+from interview_gen import InterviewOrchestrator, InterviewPlanSkeleton, StageCvContext, StageGeneration, stringify_stage
 from settings import settings
 from ws_connection_manager import manager
 
