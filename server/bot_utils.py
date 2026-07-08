@@ -95,7 +95,7 @@ Evaluation Focus:
    b. Ask the candidate:
       "Thank you for your time. Do you have any questions for me?"
    c. Wait for the candidate response.
-   d. Call `submit_interviewee_question` to log their question.
+   d. Call `submit_answer_and_metrics` to log their question as the answer.
    e. Provide a brief closing statement.
    f. End the interview.
 
@@ -135,14 +135,7 @@ class ActiveInterviewState:
             "behaviour": behaviour,
             "answer_text": answer_text
         })
-    def log_interviewee_question(self, question_text: str):
-        self.answers_log.append({
-            "question_from": "Interviewee",
-            "question_order": len(self.answers_log) + 1,
-            "question_text": "Do you have any questions for me?",
-            "behaviour": "",
-            "answer_text": question_text
-        })
+
         
         
 
@@ -169,12 +162,7 @@ def make_interview_tools(active_session: ActiveInterviewState):
         behaviour = f"Confidence: {a['confidence']}. Pacing/Delivery: {a['pacing']}."
         active_session.log_response(a["question_text"], a["answer_text"], behaviour)
         await params.result_callback({"status": "success", "message": "Answer logged."})
-        
-    async def submit_interviewee_question(params: FunctionCallParams):
-        a = params.arguments
-        active_session.log_interviewee_question(a["interviewee_question"])
-        await params.result_callback({"status": "success", "message": "Interviewee question logged."})
-
+         
     async def inject_followup_question(params: FunctionCallParams):
         a = params.arguments
         await params.result_callback({
@@ -210,23 +198,7 @@ def make_interview_tools(active_session: ActiveInterviewState):
                 "reason": {"type": "string"},
             },
             required=["followup_text"],
-        ),
-        FunctionSchema(
-            name="submit_interviewee_question",
-            description="""
-            Log the final question asked by the interview candidate.
-            Use this only after asking:
-            'Do you have any questions for me?'
-            """,
-            properties={
-                "interviewee_question": {
-                    "type": "string"
-                }
-            },
-            required=[
-                "interviewee_question"
-            ],
-        )
+        ), 
     ])
 
     handlers = {
