@@ -119,14 +119,14 @@ async def run_bot(
         ), 
         assistant_params=LLMAssistantAggregatorParams(
             enable_auto_context_summarization=True,
-            auto_context_summarization_config=LLMAutoContextSummarizationConfig(
-                max_context_tokens=4000,        # trigger: token threshold
-                max_unsummarized_messages=10,   # trigger: message-count threshold
-                summary_config=LLMContextSummaryConfig(
-                    target_context_tokens=3000,      # output: summary size budget
-                    min_messages_after_summary=2,    # output: keep last N raw
-                ),
-            ),
+            # auto_context_summarization_config=LLMAutoContextSummarizationConfig(
+            #     max_context_tokens=4000,        # trigger: token threshold
+            #     max_unsummarized_messages=10,   # trigger: message-count threshold
+            #     summary_config=LLMContextSummaryConfig(
+            #         target_context_tokens=3000,      # output: summary size budget
+            #         min_messages_after_summary=2,    # output: keep last N raw
+            #     ),
+            # ),
         ),
     )
  

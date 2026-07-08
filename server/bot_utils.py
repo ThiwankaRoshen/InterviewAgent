@@ -54,15 +54,14 @@ Evaluation Focus:
    - Do NOT ask the first interview question yourself.
 
 2. QUESTION CONTROL:
-   - The interview questions are managed ONLY through the `get_next_question` tool.
+   - The interview questions are managed ONLY through the `get_current_question, get_next_question` tools.
    - NEVER invent, modify, summarize, or create your own interview questions.
-   - NEVER continue with an improvised conversation.
-   - Before asking any interview question, ALWAYS call `get_next_question`.
+   - NEVER continue with an improvised conversation. 
 
 3. INTERVIEW FLOW:
-   Follow this exact loop:
+   Follow this exact loop after greeting:
 
-   a. Call `get_next_question`.
+   a. Call `get_current_question`.
    b. Ask the returned question exactly as provided.
    c. Wait for the candidate's answer.
    d. Evaluate the answer internally.
@@ -149,15 +148,29 @@ class ActiveInterviewState:
 
 def make_interview_tools(active_session: ActiveInterviewState):
     """Return (tools_schema, handlers) bound to this call's state."""
-
-    async def get_next_question(params: FunctionCallParams):
+    async def get_current_question(params: FunctionCallParams):
+        
         node = active_session.get_current_question()
         if not node:
             await params.result_callback(
                 {"status": "complete", "message": "No more planned questions. Wrap up the interview."}
             )
             return
+        await params.result_callback({
+            "status": "ongoing",
+            "question": node["question"],
+            "expected_behavior": node.get("expected_behavior", ""),
+        })
+    
+    async def get_next_question(params: FunctionCallParams):
         active_session.advance_question()
+        
+        node = active_session.get_current_question()
+        if not node:
+            await params.result_callback(
+                {"status": "complete", "message": "No more planned questions. Wrap up the interview."}
+            )
+            return
         await params.result_callback({
             "status": "ongoing",
             "question": node["question"],
@@ -181,6 +194,12 @@ def make_interview_tools(active_session: ActiveInterviewState):
 
 
     tools_schema = ToolsSchema(standard_tools=[
+        FunctionSchema(
+            name="get_current_question",
+            description="Fetch the current interview question.",
+            properties={},
+            required=[],
+        ),
         FunctionSchema(
             name="get_next_question",
             description="Fetch the next planned interview question.",
@@ -210,6 +229,7 @@ def make_interview_tools(active_session: ActiveInterviewState):
     ])
 
     handlers = {
+        "get_current_question": get_current_question,
         "get_next_question": get_next_question,
         "submit_answer_and_metrics": submit_answer_and_metrics,
         "inject_followup_question": inject_followup_question,
