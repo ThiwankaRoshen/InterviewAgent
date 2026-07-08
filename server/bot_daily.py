@@ -43,7 +43,7 @@ load_dotenv(override=True)
 async def run_bot(
     transport: DailyTransport,  # Type hint updated
     stage_id: int, 
-    practice_session_id: int, 
+    practice_attempt_id: int, 
     db: AsyncSession
 ) -> None:
     """Run the voice bot for this session."""
@@ -94,7 +94,7 @@ async def run_bot(
     # ═══════════════════════════════════════════════════════════════
     system_prompt = await generate_system_prompt(stage_id, db)
     active_session = await initialize_active_session_state(
-        stage_id, practice_session_id, db
+        stage_id, practice_attempt_id, db
     )
     tools_schema, handlers = make_interview_tools(active_session)
 
@@ -195,7 +195,7 @@ async def run_bot_entrypoint(
     room_url: str,
     token: str,
     stage_id: int, 
-    practice_session_id: int
+    practice_attempt_id: int
 ):
     """
     Entry point called from FastAPI.
@@ -203,7 +203,7 @@ async def run_bot_entrypoint(
     Args:
         room_url: The Daily.co room URL (e.g., "https://your-domain.daily.co/abc123")
         stage_id: Interview stage ID
-        practice_session_id: Practice stage ID
+        practice_attempt_id: Practice Attempt ID
     """
     # ═══════════════════════════════════════════════════════════════
     # CHANGED: Create DailyTransport instead of SmallWebRTCTransport
@@ -227,7 +227,7 @@ async def run_bot_entrypoint(
     # Fresh DB session that lives as long as the call
     async with AsyncSessionLocal() as db:
         try:
-            await run_bot(transport, stage_id, practice_session_id, db)
+            await run_bot(transport, stage_id, practice_attempt_id, db)
         except asyncio.CancelledError:
             logger.info("Bot task was cancelled")
         except Exception as e:

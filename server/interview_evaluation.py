@@ -106,8 +106,8 @@ Interview:
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    md_path = reports_dir / f"practice_{active_session.practice_session_id}__{active_session.stage_id}{timestamp}.md"
-    pdf_path = reports_dir / f"practice_{active_session.practice_session_id}_{timestamp}.pdf"
+    md_path = reports_dir / f"practice_{active_session.practice_attempt_id}.md"
+    pdf_path = reports_dir / f"practice_{active_session.practice_attempt_id}.pdf"
 
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(markdown_report)

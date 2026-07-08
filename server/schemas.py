@@ -81,53 +81,14 @@ class InterviewPlanResponse(BaseModel):
     
 
 
-class StartPracticeRequest(BaseModel):
-    stage_id: int = Field(..., description="The ID of the master Stage template being practiced")
-    practice_session_id: int = Field(..., description="The ID of the parent Session for this practice run")
-
-class StopPracticeRequest(BaseModel):
-    room_url: str = Field(..., description="The Daily room URL to stop the practice session")
 
 
-class StartPracticeResponse(BaseModel):
-    practice_session_id: int
-    stage_id: int
-    # Pipecat/Daily connection details sent back to your frontend UI
-    room_url: str = Field(..., description="The WebRTC/Daily URL for the front-end to connect to voice")
-    token: str = Field(..., description="Access token for the voice room session")
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class AnswerCreate(BaseModel):
-    question_order: int
-    question_text: str
-    behaviour: str = Field(..., description="Metrics from Pipecat like latency, interruption, confidence")
-    answer_text: str = Field(..., description="The transcribed speech-to-text string")
-
-
-class AnswerResponse(AnswerCreate):
-    id: int
-    practice_stage_id: int
-
-    model_config = ConfigDict(from_attributes=True)
-    
-    
- 
-class SessionFeedbackUpdate(BaseModel):
-    feedback: str = Field(
-        ..., 
-        description="User instructions for refining the track (e.g., 'Make technical stage focus more on system design')"
-    )
-
-
-class SessionEvaluationResponse(BaseModel):
-    id: int
-    user_id: int
-    feedback: str
-    date_created: datetime
-    
-    # We include a brief breakdown summary of previous historical attempts in the response
-    total_practice_runs: int = Field(0, description="Count of how many times they practiced this setup")
+class PracticeResponse(BaseModel):
+    practice_attempt_id: int
+    room_url: str
+    token: str
+    status: str
+    md_results_path: str
+    pdf_results_path: str
 
     model_config = ConfigDict(from_attributes=True)

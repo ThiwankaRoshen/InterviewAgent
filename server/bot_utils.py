@@ -104,8 +104,8 @@ Your primary responsibility is to execute the interview workflow, not to have a 
 """.strip()
 
 class ActiveInterviewState:
-    def __init__(self, practice_session_id: int, stage_id: int,  questions_and_answers_json: str, stage_name: str, stage_description: str):
-        self.practice_session_id = practice_session_id
+    def __init__(self, practice_attempt_id: int, stage_id: int,  questions_and_answers_json: str, stage_name: str, stage_description: str):
+        self.practice_attempt_id = practice_attempt_id
         self.stage_id = stage_id
         self.stage_name = stage_name
         self.stage_description = stage_description
@@ -217,7 +217,7 @@ def make_interview_tools(active_session: ActiveInterviewState):
     return tools_schema, handlers
     
 
-async def initialize_active_session_state(stage_id: int, practice_session_id: int, db: AsyncSession) -> ActiveInterviewState:
+async def initialize_active_session_state(stage_id: int, practice_attempt_id: int, db: AsyncSession) -> ActiveInterviewState:
     # Pull the JSON array definition out of the master template stage
     stage = await db.execute(
         select(models.Stage)
@@ -230,7 +230,7 @@ async def initialize_active_session_state(stage_id: int, practice_session_id: in
         
     # Instantiate the memory tracker instance to be consumed by Pipecat hooks
     return ActiveInterviewState(
-        practice_session_id=practice_session_id, 
+        practice_attempt_id=practice_attempt_id, 
         stage_id=stage_id,
         questions_and_answers_json=stage.questions_and_answers,
         stage_description=stage.stage_description,
@@ -243,18 +243,12 @@ async def close_and_persist_interview_stage(active_session: ActiveInterviewState
     Flushes the memory state buffer straight to SQLite in a single transaction 
     and opens the floor for evaluation triggers.
     """
-    # 0. Init a PracticeStage record to mark the end of this run
-    practice_stage = models.PracticeStage(
-        practice_session_id=active_session.practice_session_id,
-    )
-    db.add(practice_stage)
-    await db.commit()
-    await db.refresh(practice_stage)
-    
+ 
+ 
     # 1. Map raw list dictionaries to explicit Answer object models
     bulk_answers = [
         models.Answer(
-            practice_stage_id=practice_stage.id,
+            practice_attempt_id=active_session.practice_attempt_id,
             question_order=item["question_order"],
             question_text=item["question_text"],
             behaviour=item["behaviour"],

@@ -118,72 +118,101 @@ async def get_interview_stage(
 
     return stage
 
+async def get_stage(
+    db: AsyncSession,
+    stage_id: int,
+) -> models.Stage | None:
 
-async def create_practice_session(
-    db: AsyncSession, session_id: int
-) -> models.PracticeSession: 
-    practice_session = models.PracticeSession(
-        session_id=session_id, 
-        created_at=datetime.now(UTC)
+    result = await db.execute(
+        select(models.Stage).where(
+            models.Stage.id == stage_id
+        )
     )
-    db.add(practice_session) 
 
+    return result.scalar_one_or_none()
+
+async def create_practice_attempt(
+    db: AsyncSession,
+    stage_id: int,
+    room_url: str,
+    token: str,
+    status: str = "STARTED",
+) -> models.PracticeAttempt:
+
+    practice = models.PracticeAttempt(
+        stage_id=stage_id,
+        room_url=room_url,
+        token=token,
+        status=status,
+    )
+
+    db.add(practice)
     await db.commit()
-    await db.refresh(practice_session)
+    await db.refresh(practice)
 
-    return practice_session
+    return practice
 
+async def get_practice_attempt(
+    db: AsyncSession,
+    practice_attempt_id: int,
+) -> models.PracticeAttempt | None:
 
-def record_live_answer(
-    db: AsyncSession, practice_stage_id: int, answer_data: schemas.AnswerCreate
-) -> models.Answer:
-    """
-    Invoked dynamically when Pipecat triggers an update tool callback after processing an exchange.
-    """
-    answer = models.Answer(
-        practice_stage_id=practice_stage_id,
-        question_order=answer_data.question_order,
-        question_text=answer_data.question_text,
-        behaviour=answer_data.behaviour,
-        answer_text=answer_data.answer_text,
-    )
-    db.add(answer)
-    db.commit()
-    db.refresh(answer)
-    return answer
-
-
-async def update_session_feedback(
-    db: AsyncSession, session_id: int, feedback_data: schemas.SessionFeedbackUpdate
-) -> models.Session | None:
-    """
-    Saves the iteration instructions into the parent session row.
-    """
-    session = await db.execute(
-        select(models.Session).where(models.Session.id == session_id)
+    result = await db.execute(
+        select(models.PracticeAttempt).where(
+            models.PracticeAttempt.id == practice_attempt_id
+        )
     )
 
-    session = session.scalars().first()
-    if not session:
+    return result.scalar_one_or_none()
+
+async def stop_practice_attempt(
+    db: AsyncSession,
+    practice_attempt_id: int,
+) -> models.PracticeAttempt | None:
+
+    practice = await get_practice_attempt(db, practice_attempt_id)
+
+    if practice is None:
         return None
 
-    session.feedback = feedback_data.feedback
+    practice.status = "STOPPED"
 
-    db.commit()
-    db.refresh(session)
-    return session
+    await db.commit()
+    await db.refresh(practice)
 
+    return practice
 
-async def get_practice_runs_count(
+async def practice_attempt_owned_by(
     db: AsyncSession,
-    session_id: int,
-) -> int:
-    """
-    Count previous practice runs for an interview session.
-    """
-    stmt = select(func.count(models.PracticeSession.id)).where(
-        models.PracticeSession.session_id == session_id
+    practice_attempt_id: int,
+    user_id: int,
+) -> bool:
+
+    result = await db.execute(
+        select(models.PracticeAttempt)
+        .join(models.Stage)
+        .join(models.Session)
+        .where(
+            models.PracticeAttempt.id == practice_attempt_id,
+            models.Session.user_id == user_id,
+        )
     )
 
-    result = await db.execute(stmt)
-    return result.scalar_one()
+    return result.scalar_one_or_none() is not None
+
+async def stage_owned_by(
+    db: AsyncSession,
+    stage_id: int,
+    user_id: int,
+) -> bool:
+
+    result = await db.execute(
+        select(models.Stage)
+        .join(models.Session)
+        .where(
+            models.Stage.id == stage_id,
+            models.Session.user_id == user_id,
+        )
+    )
+
+    return result.scalar_one_or_none() is not None
