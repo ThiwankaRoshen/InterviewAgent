@@ -14,7 +14,10 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
-)
+    LLMAssistantAggregatorParams
+) 
+from pipecat.utils.context.llm_context_summarization import LLMContextSummaryConfig
+
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.services.assemblyai.stt import AssemblyAISTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
@@ -111,7 +114,15 @@ async def run_bot(
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(),
         ),
+        assistant_params=LLMAssistantAggregatorParams(
+            enable_auto_context_summarization=True,
+            auto_context_summarization_config=LLMContextSummaryConfig(
+                target_context_tokens=2000,   # summary size budget
+                min_messages_after_summary=2, # always keep last N messages raw
+            ),
+        ),
     )
+ 
 
     # ═══════════════════════════════════════════════════════════════
     # PIPELINE - Unchanged (transport.input/output work the same)
