@@ -41,6 +41,7 @@ class SessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
 class StagePublic(BaseModel):
+    id: int 
     stage_order: int = Field(..., description="The sequential order of the interview stage (e.g., 1, 2, 3)")
     stage_name: str = Field(..., description="Name of the stage (e.g., Technical, Behavioral)")
     stage_description: str = Field(..., description="What this specific stage evaluates")

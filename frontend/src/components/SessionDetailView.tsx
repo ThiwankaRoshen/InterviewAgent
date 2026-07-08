@@ -75,7 +75,7 @@ export function SessionDetailView({
       return
     }
 
-    const success = await startPractice(selectedStage.stage_order)
+    const success = await startPractice(selectedStage.id)
     if (!success) {
       // Error is already set in the hook
     }
@@ -264,7 +264,7 @@ export function SessionDetailView({
           <div className="stages-grid">
             {session.stages.map((stage) => (
               <StageItemCard
-                key={`${stage.stage_order}-${stage.stage_name}`}
+                key={`${stage.id}-${stage.stage_name}`}
                 stage={stage}
                 onSelect={(s) => setSelectedStage(s)}
                 isLoading={practiceLoading}

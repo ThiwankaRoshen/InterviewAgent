@@ -7,6 +7,7 @@ export interface SessionItem {
 }
 
 export interface StageItem {
+  id: number
   stage_order: number
   stage_name: string
   stage_description: string
