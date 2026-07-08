@@ -694,6 +694,12 @@ wheels = [
 ]
 
 [[package]]
+name = "docopt"
+version = "0.6.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/55/8f8cab2afd404cf578136ef2cc5dfb50baa1761b68c9da1fb1e4eed343c9/docopt-0.6.2.tar.gz", hash = "sha256:49b3a825280bd66b3aa83585ef59c4a8c82f2c8a522dbe754a8bc8d08c85c491", size = 25901, upload-time = "2014-06-16T11:18:57.406Z" }
+
+[[package]]
 name = "docstring-parser"
 version = "0.18.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2016,6 +2022,18 @@ wheels = [
 ]
 
 [[package]]
+name = "num2words"
+version = "0.5.14"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "docopt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f6/58/ad645bd38b4b648eb2fc2ba1b909398e54eb0cbb6a7dbd2b4953e38c9621/num2words-0.5.14.tar.gz", hash = "sha256:b066ec18e56b6616a3b38086b5747daafbaa8868b226a36127e0451c0cf379c6", size = 218213, upload-time = "2024-12-17T20:17:10.191Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d6/5b/545e9267a1cc080c8a1be2746113a063e34bcdd0f5173fd665a5c13cb234/num2words-0.5.14-py3-none-any.whl", hash = "sha256:1c8e5b00142fc2966fd8d685001e36c4a9911e070d1b120e1beb721fa1edb33d", size = 163525, upload-time = "2024-12-17T20:17:06.074Z" },
+]
+
+[[package]]
 name = "numba"
 version = "0.65.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2527,7 +2545,7 @@ wheels = [
 
 [[package]]
 name = "pipecat-ai"
-version = "1.4.0"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -2537,6 +2555,7 @@ dependencies = [
     { name = "loguru" },
     { name = "markdown" },
     { name = "nltk" },
+    { name = "num2words" },
     { name = "numba" },
     { name = "numpy" },
     { name = "onnxruntime" },
@@ -2553,9 +2572,9 @@ dependencies = [
     { name = "wait-for2", marker = "python_full_version < '3.12'" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d5/ed/4bcf67703996ac6a0896dc64232e79fdfcb23eccff36929a7a234587a085/pipecat_ai-1.4.0.tar.gz", hash = "sha256:4d1e68da79e0632dcdaf66581fbf07e840249dfb715dc6e57b423d20fc3520d7", size = 11505429, upload-time = "2026-06-17T03:27:48.83Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e3/59/7b46ccbeb7c8f68083d0bc1ef39583e78938c6e65af1ff6f707051ea0948/pipecat_ai-1.5.0.tar.gz", hash = "sha256:df9bd5c3176076d425ffba3d510e0122d055b97c9ba8ad35a4390073eb421e18", size = 11624719, upload-time = "2026-07-04T17:11:50.441Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7e/ab/9acf81effd93f6f6d1ededbe5db8fedb50d196363d75188dc21d8aa71d5a/pipecat_ai-1.4.0-py3-none-any.whl", hash = "sha256:d7e1f2ee6f2646720daed3a028835d0e26e5e93787d0424ab00f4c7b6034a170", size = 11171447, upload-time = "2026-06-17T03:27:46.367Z" },
+    { url = "https://files.pythonhosted.org/packages/41/05/c7daebbf0fc59fd6106e34e52a255727443c1db49d046f7ed0bd9dcb6e4e/pipecat_ai-1.5.0-py3-none-any.whl", hash = "sha256:6089ac7ec418b310975c9c16dd472c16f99838810aae707d669b4f6f5981cf8a", size = 11264890, upload-time = "2026-07-04T17:11:47.677Z" },
 ]
 
 [package.optional-dependencies]
@@ -2646,7 +2665,7 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp", specifier = ">=1.43.0" },
     { name = "orjson", specifier = ">=3.11.9" },
     { name = "pillow", specifier = ">=12.2.0" },
-    { name = "pipecat-ai", extras = ["assemblyai", "deepgram", "openai", "runner", "silero", "webrtc"], specifier = ">=1.4.0" },
+    { name = "pipecat-ai", extras = ["assemblyai", "deepgram", "openai", "runner", "silero", "webrtc"], specifier = ">=1.5.0" },
     { name = "pipecatcloud" },
     { name = "pwdlib", extras = ["argon2"], specifier = ">=0.3.0" },
     { name = "pydantic", specifier = ">=2.13.4" },

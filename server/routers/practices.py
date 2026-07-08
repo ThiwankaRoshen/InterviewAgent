@@ -3,7 +3,8 @@ from fastapi import APIRouter, HTTPException, status
 from loguru import logger
 
 from daily_utils import create_daily_room, create_daily_token, delete_daily_room
-from bot_daily import run_bot_entrypoint
+# from bot_daily import run_bot_entrypoint
+from bot_daily_flow import run_bot_entrypoint
 from auth import CurrentUser 
 import crud
 from database import DBSession
