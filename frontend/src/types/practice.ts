@@ -1,5 +1,7 @@
 export interface StartPracticeResponse {
-  practice_attempt_id: number
+  practice_attempt_id?: number | null
+  id?: number | null
+  practice_session_id?: number | null
   room_url: string
   token: string
   status: string
@@ -9,7 +11,7 @@ export interface StartPracticeResponse {
 
 export interface PracticeSession {
   stageId: number
-  practiceAttemptId: number
+  practiceAttemptId: number | null
   roomUrl: string
   token: string
   status: string

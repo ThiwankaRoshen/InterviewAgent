@@ -23,10 +23,16 @@ export function usePracticeSession({ token }: UsePracticeSessionOptions) {
 
     try {
       const response = await startPracticeSession(token, stageId)
+      const practiceAttemptId = response.practice_attempt_id ?? response.id ?? response.practice_session_id
+
+      if (!practiceAttemptId) {
+        setError('The server did not return a practice attempt ID.')
+        return false
+      }
 
       setPracticeSessions({
         stageId,
-        practiceAttemptId: response.practice_attempt_id,
+        practiceAttemptId,
         roomUrl: response.room_url,
         token: response.token,
         status: response.status,

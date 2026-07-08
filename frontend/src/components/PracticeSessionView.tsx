@@ -53,7 +53,7 @@ export function PracticeSessionView({
           </div>
           <div className="practice-session__detail-item">
             <span className="practice-session__detail-label">Practice attempt:</span>
-            <code className="practice-session__detail-value">{practiceSession.practiceAttemptId}</code>
+            <code className="practice-session__detail-value">{practiceSession.practiceAttemptId ?? 'Unavailable'}</code>
           </div>
           <div className="practice-session__detail-item">
             <span className="practice-session__detail-label">Status:</span>

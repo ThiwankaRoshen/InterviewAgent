@@ -22,7 +22,11 @@ export async function startPracticeSession(token: string, stageId: number): Prom
   return response.json()
 }
 
-export async function stopPracticeSession(token: string, practiceAttemptId: number): Promise<void> {
+export async function stopPracticeSession(token: string, practiceAttemptId: number | null): Promise<void> {
+  if (!practiceAttemptId) {
+    throw new Error('No practice attempt ID available to stop the session.')
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/practices/stop/${practiceAttemptId}`, {
     method: 'POST',
     headers: {
