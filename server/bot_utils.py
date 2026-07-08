@@ -29,39 +29,88 @@ async def generate_system_prompt(stage_id: int, db: AsyncSession) -> str:
 
     # 2. Build and return the compiled system prompt string directly
     return f"""
-You are an advanced AI Interviewer simulation engine acting out a live voice session.
+You are an AI interviewer conducting a structured interview.
 
-[STAGE OBJECTIVES]
-- Current Stage: {stage.stage_order}
-- Stage Name: {stage.stage_name}
-- Focus Evaluation: {stage.stage_description}
+You are NOT a general conversational assistant.
+You are executing a predefined interview workflow.
 
-[YOUR PERSONA & TONALITY]
+[INTERVIEW STAGE]
+Stage Order: {stage.stage_order}
+Stage Name: {stage.stage_name}
+Evaluation Focus:
+{stage.stage_description}
+
+
+[PERSONA]
 {stage.interviewer_persona}
 
-[CANDIDATE BACKGROUND CONTEXT]
-- Target Job Specifications: 
-{session.job_description}
 
-- Target Company Culture/Core:
-{session.company_info}
+[CORE INTERVIEW RULES]
 
-- Extra Context / Past Leakage Details:
-{session.additional_info}
+1. At the beginning of the interview:
+   - Greet the candidate politely.
+   - Introduce yourself briefly.
+   - Explain that the interview will begin.
+   - Do NOT ask the first interview question yourself.
 
-[CRITICAL INSTRUCTIONS]
-1. Remain strictly in character based on your assigned Persona.
-2. Adapt dynamically to candidate responses, analyzing confidence, clarity, and critical thinking.
-3. Keep conversational turns natural, direct, and voice-optimized (avoid dense walls of text).
+2. QUESTION CONTROL:
+   - The interview questions are managed ONLY through the `get_next_question` tool.
+   - NEVER invent, modify, summarize, or create your own interview questions.
+   - NEVER continue with an improvised conversation.
+   - Before asking any interview question, ALWAYS call `get_next_question`.
+
+3. INTERVIEW FLOW:
+   Follow this exact loop:
+
+   a. Call `get_next_question`.
+   b. Ask the returned question exactly as provided.
+   c. Wait for the candidate's answer.
+   d. Evaluate the answer internally.
+   e. Call `submit_answer_and_metrics`.
+   f. Decide whether clarification is required.
+   g. If needed, use `inject_followup_question`.
+   h. Otherwise call `get_next_question` again.
+
+4. FOLLOW-UP QUESTIONS:
+   - Only create follow-up questions when the candidate answer requires clarification.
+   - Follow-ups must not replace planned questions.
+   - After a follow-up, return to the planned question sequence.
+
+5. STRICT SEQUENCE:
+   - The predefined question order must never change.
+   - Never skip questions.
+   - Never revisit previous questions.
+   - Never end the interview early unless `get_next_question` returns completion.
+
+6. VOICE OPTIMIZATION:
+   - Keep responses short and natural.
+   - Avoid long explanations.
+   - Ask one question at a time.
+   - Do not reveal evaluation criteria.
+
+7. COMPLETION:
+   When `get_next_question` returns status=complete:
+
+   a. Do NOT immediately end the interview.
+   b. Ask the candidate:
+      "Thank you for your time. Do you have any questions for me?"
+   c. Wait for the candidate response.
+   d. Call `submit_interviewee_question` to log their question.
+   e. Provide a brief closing statement.
+   f. End the interview.
+
+
+Your primary responsibility is to execute the interview workflow, not to have a free-form conversation.
 """.strip()
 
 class ActiveInterviewState:
-    def __init__(self, practice_session_id: int, stage_id: int,  questions_and_answers_json: str):
+    def __init__(self, practice_session_id: int, stage_id: int,  questions_and_answers_json: str, stage_name: str, stage_description: str):
         self.practice_session_id = practice_session_id
         self.stage_id = stage_id
+        self.stage_name = stage_name
+        self.stage_description = stage_description
         # Parse the JSON string containing the static questions from the Stage template
-        self.master_questions: List[Dict[str, Any]] = [{q_a["question"]:q_a["expected_behavior"]} 
-                                                       for q_a in json.loads(questions_and_answers_json)]
+        self.master_questions: List[Dict[str, Any]] = json.loads(questions_and_answers_json)
 
         
         self.current_index = 0
@@ -77,14 +126,24 @@ class ActiveInterviewState:
         """Moves the pointer forward to the next master question."""
         self.current_index += 1
 
-    def log_response(self, question_text: str, answer_text: str, behaviour: str):
+    def log_response(self,  question_text: str, answer_text: str, behaviour: str, question_from: str = "Interviewer",):
         """Appends an execution record to RAM."""
         self.answers_log.append({
+            "question_from": question_from,
             "question_order": len(self.answers_log) + 1,
             "question_text": question_text,
             "behaviour": behaviour,
             "answer_text": answer_text
         })
+    def log_interviewee_question(self, question_text: str):
+        self.answers_log.append({
+            "question_from": "Interviewee",
+            "question_order": len(self.answers_log) + 1,
+            "question_text": "Do you have any questions for me?",
+            "behaviour": "",
+            "answer_text": question_text
+        })
+        
         
 
 
@@ -110,6 +169,11 @@ def make_interview_tools(active_session: ActiveInterviewState):
         behaviour = f"Confidence: {a['confidence']}. Pacing/Delivery: {a['pacing']}."
         active_session.log_response(a["question_text"], a["answer_text"], behaviour)
         await params.result_callback({"status": "success", "message": "Answer logged."})
+        
+    async def submit_interviewee_question(params: FunctionCallParams):
+        a = params.arguments
+        active_session.log_interviewee_question(a["interviewee_question"])
+        await params.result_callback({"status": "success", "message": "Interviewee question logged."})
 
     async def inject_followup_question(params: FunctionCallParams):
         a = params.arguments
@@ -117,6 +181,8 @@ def make_interview_tools(active_session: ActiveInterviewState):
             "status": "acknowledged",
             "instruction": f"Proceed to speak this follow-up question directly to candidate: {a['followup_text']}",
         })
+    
+
 
     tools_schema = ToolsSchema(standard_tools=[
         FunctionSchema(
@@ -145,6 +211,22 @@ def make_interview_tools(active_session: ActiveInterviewState):
             },
             required=["followup_text"],
         ),
+        FunctionSchema(
+            name="submit_interviewee_question",
+            description="""
+            Log the final question asked by the interview candidate.
+            Use this only after asking:
+            'Do you have any questions for me?'
+            """,
+            properties={
+                "interviewee_question": {
+                    "type": "string"
+                }
+            },
+            required=[
+                "interviewee_question"
+            ],
+        )
     ])
 
     handlers = {
@@ -157,20 +239,22 @@ def make_interview_tools(active_session: ActiveInterviewState):
 
 async def initialize_active_session_state(stage_id: int, practice_session_id: int, db: AsyncSession) -> ActiveInterviewState:
     # Pull the JSON array definition out of the master template stage
-    result = await db.execute(
-        select(models.Stage.questions_and_answers)
+    stage = await db.execute(
+        select(models.Stage)
         .where(models.Stage.id == stage_id)
     )
-    qas_json = result.scalar_one_or_none()
+    stage = stage.scalar_one_or_none()
     
-    if not qas_json:
+    if not stage:
         raise ValueError("Stage blueprint configuration does not exist.")
         
     # Instantiate the memory tracker instance to be consumed by Pipecat hooks
     return ActiveInterviewState(
         practice_session_id=practice_session_id, 
         stage_id=stage_id,
-        questions_and_answers_json=qas_json
+        questions_and_answers_json=stage.questions_and_answers,
+        stage_description=stage.stage_description,
+        stage_name=stage.stage_name,
     )
 
 

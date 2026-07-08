@@ -50,7 +50,9 @@ Candidate Answer:
     prompt = f"""
 You are a senior interview evaluator.
 
-Evaluate the candidate's interview.
+Evaluate the candidate's {active_session.stage_name} interview stage.
+About Interview Stage:
+{active_session.stage_description}
 
 Return your response ONLY in Markdown.
 
