@@ -126,14 +126,14 @@ class ActiveInterviewState:
         """Moves the pointer forward to the next master question."""
         self.current_index += 1
 
-    def log_response(self,  question_text: str, answer_text: str, behaviour: str, question_from: str = "Interviewer",):
+    def log_response(self,  question_text: str, answer_text: str, behaviour: str):
         """Appends an execution record to RAM."""
-        self.answers_log.append({
-            "question_from": question_from,
+        self.answers_log.append({ 
             "question_order": len(self.answers_log) + 1,
             "question_text": question_text,
             "behaviour": behaviour,
-            "answer_text": answer_text
+            "answer_text": answer_text,
+            "expected_behavior": self.master_questions[self.current_index]["expected_behaviour"],
         })
 
         

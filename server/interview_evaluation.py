@@ -35,13 +35,16 @@ async def trigger_stage_evaluation_pipeline(active_session):
     for answer in active_session.answers_log:
 
         interview_text += f"""
-Question:
+### Question:
 {answer["question_text"]}
 
-Expected Behaviour:
+**Expected Behaviour**:
+{answer["expected_behavior"]}
+
+**Candidate behaviour**:
 {answer["behaviour"]}
 
-Candidate Answer:
+**Candidate Answer**:
 {answer["answer_text"]}
 
 ---------------------------------------
