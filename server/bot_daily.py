@@ -188,7 +188,8 @@ async def run_bot(
         await worker.cancel()
         
         # Wait a bit for any pending traces to export
-        await asyncio.sleep(5)
+        # await asyncio.sleep(5)
+        tracing_processor.force_flush(timeout_millis=30000)
         
         # Persist interview data
         await close_and_persist_interview_stage(active_session, db)

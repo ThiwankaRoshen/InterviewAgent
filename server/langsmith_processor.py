@@ -331,14 +331,25 @@ def setup_langsmith_tracing(
     # when the endpoint is passed as a constructor argument, so we add it here.
     traces_endpoint = f"{base_endpoint.rstrip('/')}/v1/traces"
 
+    # exporter = OTLPSpanExporter(
+    #     endpoint=traces_endpoint,
+    #     headers={
+    #         "x-api-key": api_key,
+    #         "Langsmith-Project": project,
+    #     },
+    # )
+    
     exporter = OTLPSpanExporter(
         endpoint=traces_endpoint,
-        headers={
-            "x-api-key": api_key,
-            "Langsmith-Project": project,
-        },
+        headers={"x-api-key": api_key, "Langsmith-Project": project},
+        timeout=60,  # seconds
     )
-    downstream = BatchSpanProcessor(exporter)
+    # downstream = BatchSpanProcessor(exporter)
+    downstream = BatchSpanProcessor(
+        exporter,
+        max_export_batch_size=1,   # don't batch the big conversation span with others
+        export_timeout_millis=60000,
+    )
 
     setup_tracing(service_name="voice-demo-pipecat", exporter=None, console_export=False)
 
