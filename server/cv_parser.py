@@ -9,6 +9,7 @@ from typing import List, Dict, Optional
 import json 
 import fitz
 from langsmith import traceable
+import tiktoken
 from settings import settings
 
 # ============================================
@@ -84,6 +85,10 @@ class LangChainResumeParser:
             max_retries=2,
             mistral_api_key=settings.MISTRAL_API_KEY
         )
+        self.encoding = tiktoken.get_encoding("cl100k_base")
+        self.MAX_CONTEXT_TOKENS = 28000
+        self.RESERVED_FOR_PROMPT_AND_OUTPUT = 4000
+ 
         
         self.resume_parser = PydanticOutputParser(pydantic_object=ParsedResume)
         
@@ -108,6 +113,12 @@ class LangChainResumeParser:
             | self.llm
             | self.resume_parser
         )
+    def count_tokens(self, text: str) -> int:
+        return len(self.encoding.encode(text))
+ 
+    def exceeds_context(self, text: str) -> bool:
+        budget = self.MAX_CONTEXT_TOKENS - self.RESERVED_FOR_PROMPT_AND_OUTPUT
+        return self.count_tokens(text) > budget
     
     def load_pdf(self, path: str) -> str:
         """Load PDF using LangChain document loader"""
@@ -118,7 +129,9 @@ class LangChainResumeParser:
     def parse(self, pdf_path: str) -> ParsedResume:
         """Parse resume from PDF path"""
         text = self.load_pdf(pdf_path)
-        return self.chain.invoke(text)
+        if not self.exceeds_context(text):
+            return self.chain.invoke(text)
+        raise Exception("Langchain CV Parser: Exceed the context window")
     
     def parse_text(self, text: str) -> ParsedResume:
         """Parse resume from text"""

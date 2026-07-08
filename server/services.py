@@ -49,12 +49,9 @@ async def create_interview_session_service(
         parser = LangChainResumeParser()
         cv_content = parser.parse(session.cv_file_path)
     except Exception as e:
-        logger.error(f"CV parsing failed: {e}")
-        await manager.send_error(session_id, "cv_parse_failed", str(e))
-        raise
-    
-    await manager.send_progress(session_id, "CV parsed successfully", 25)
-    
+        logger.warning(f"LangChain CV parse failed, falling back to raw text: {e}")
+        cv_content = parse_using_pymupdf(session.cv_file_path)  
+        
     # Prepare context
     jd = session.job_description
     company_description = session.company_info
