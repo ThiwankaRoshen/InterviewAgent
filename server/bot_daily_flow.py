@@ -49,7 +49,8 @@ from pipecat.workers.runner import WorkerRunner
 from pipecat.transports.daily.transport import DailyTransport, DailyParams
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from langsmith_processor import setup_langsmith_tracing
+# from langsmith_processor import setup_langsmith_tracing
+from langsmith.integrations.pipecat import configure_pipecat, set_thread_id
 from database import AsyncSessionLocal
 
 load_dotenv(override=True)
@@ -66,24 +67,28 @@ async def run_bot(
 
     conversation_id = str(uuid.uuid4())
 
-    tracing_processor = setup_langsmith_tracing(
-        thread_id_provider=lambda: conversation_id,
-    )
+    # tracing_processor = setup_langsmith_tracing(
+    #     thread_id_provider=lambda: conversation_id,
+    # )
 
-    recording_path = os.path.join(
-        tempfile.gettempdir(), f"recording_{conversation_id}.wav"
-    )
-    audio_buffer = AudioBufferProcessor(num_channels=2)
-    tracing_processor.register_recording(conversation_id, recording_path)
+    # recording_path = os.path.join(
+    #     tempfile.gettempdir(), f"recording_{conversation_id}.wav"
+    # )
+    # audio_buffer = AudioBufferProcessor(num_channels=2)
+    # tracing_processor.register_recording(conversation_id, recording_path)
 
-    @audio_buffer.event_handler("on_audio_data")
-    async def on_audio_data(processor, audio, sample_rate, num_channels):
-        with wave.open(recording_path, "wb") as wf:
-            wf.setnchannels(num_channels)
-            wf.setsampwidth(2)
-            wf.setframerate(sample_rate)
-            wf.writeframes(audio)
+    # @audio_buffer.event_handler("on_audio_data")
+    # async def on_audio_data(processor, audio, sample_rate, num_channels):
+    #     with wave.open(recording_path, "wb") as wf:
+    #         wf.setnchannels(num_channels)
+    #         wf.setsampwidth(2)
+    #         wf.setframerate(sample_rate)
+    #         wf.writeframes(audio)
+    span_processor = configure_pipecat()
+    set_thread_id(conversation_id)
 
+    audiobuffer = AudioBufferProcessor(num_channels=2, buffer_size=32_000)
+    span_processor.attach_audio_buffer(audiobuffer, conversation_id=conversation_id)
     # ═══════════════════════════════════════════════════════════════
     # SERVICES - Unchanged
     # ═══════════════════════════════════════════════════════════════
@@ -205,8 +210,8 @@ async def run_bot(
             context_aggregator.user(),         # Build LLM context
             llm,                     # LLM processing
             tts,                     # Text to speech
-            audio_buffer,            # Record conversation
             transport.output(),      # Audio TO user (via Daily)
+            audiobuffer,            # Record conversation
             context_aggregator.assistant(),    # Track assistant responses
         ]
     )
@@ -239,24 +244,37 @@ async def run_bot(
         logger.info("Bot ready, waiting for user to join")
         # Don't start conversation until user joins
 
+    # @transport.event_handler("on_participant_joined")
+    # async def on_participant_joined(transport, participant):
+    #     logger.info(f"Participant joined: {participant.get('user_name', 'unknown')}")
+    #     await audio_buffer.start_recording()
+
+    #     flow_manager.state["interview_state"] = active_session
+    #     await flow_manager.initialize(create_greeting_node(active_session))
+        
     @transport.event_handler("on_participant_joined")
     async def on_participant_joined(transport, participant):
         logger.info(f"Participant joined: {participant.get('user_name', 'unknown')}")
-        await audio_buffer.start_recording()
-
+        await audiobuffer.start_recording()   # renamed from audio_buffer
         flow_manager.state["interview_state"] = active_session
         await flow_manager.initialize(create_greeting_node(active_session))
 
+    # @transport.event_handler("on_participant_left")
+    # async def on_participant_left(transport, participant, reason):
+    #     """User left the Daily room."""
+    #     logger.info(f"Participant left: {participant.get('user_name', 'unknown')}")
+    #     await audio_buffer.stop_recording()
+    #     await worker.cancel()
+        
+    #     tracing_processor.force_flush(timeout_millis=30000)
+        
+    #     # Persist interview data
+    #     await close_and_persist_interview_stage(active_session, db)
     @transport.event_handler("on_participant_left")
     async def on_participant_left(transport, participant, reason):
-        """User left the Daily room."""
         logger.info(f"Participant left: {participant.get('user_name', 'unknown')}")
-        await audio_buffer.stop_recording()
+        await audiobuffer.stop_recording()
         await worker.cancel()
-        
-        tracing_processor.force_flush(timeout_millis=30000)
-        
-        # Persist interview data
         await close_and_persist_interview_stage(active_session, db)
 
     @transport.event_handler("on_error")

@@ -22,9 +22,9 @@ class Settings(BaseSettings):
     
     LANGSMITH_API_KEY: str
     LANGSMITH_PROJECT: str
-    OTEL_EXPORTER_OTLP_ENDPOINT: str
     LANGSMITH_TRACING: bool
-    LANGSMITH_ENDPOINT: str
+    # LANGSMITH_ENDPOINT: str
+    # OTEL_EXPORTER_OTLP_ENDPOINT: str
 
     SECRET_KEY: SecretStr
     ALGORITHM: str = "HS256"
