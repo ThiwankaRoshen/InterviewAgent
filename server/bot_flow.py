@@ -53,6 +53,10 @@ class ActiveInterviewState:
             return "This was a follow-up question by the interviewer."
         return self.master_questions[self.current_index].get("expected_behavior", "")
 
+    def current_answer_text(self) -> str: 
+        return self.master_questions[self.current_index].get("answer_text", "")
+
+
     def has_more_questions(self) -> bool:
         return self.current_index < len(self.master_questions)
 
@@ -157,7 +161,8 @@ def create_greeting_node(state: ActiveInterviewState) -> NodeConfig:
                 "role": "system",
                 "content": (
                     "Greet the candidate warmly, briefly introduce yourself, and let them "
-                    "know the interview is about to begin. Do NOT ask the first interview "
+                    f"know the interview is about using these notes\n**{state.stage_name}**:{state.stage_description} \n" 
+                    "and is about to begin. Do NOT ask the first interview "
                     "question yourself, and do not reveal how you'll be evaluating them. "
                     "As soon as you're done greeting them, call begin_interview."
                 ),
@@ -185,6 +190,7 @@ async def _handle_begin_interview(args: FlowArgs, flow_manager: FlowManager):
 
 def create_question_node(state: ActiveInterviewState) -> NodeConfig:
     question_text = state.current_question_text()
+    expected_behavior = state.current_expected_behavior()
     kind = "follow-up" if state.is_followup else "planned"
 
     return NodeConfig(
@@ -199,7 +205,7 @@ def create_question_node(state: ActiveInterviewState) -> NodeConfig:
                     "question. Then wait for the candidate to answer.\n\n"
                     "- If the candidate asks you to repeat the question (or clearly didn't "
                     "hear it), call repeat_question.\n"
-                    "- Once they give an answer, silently judge whether it's satisfactory "
+                    f"- Once they give an answer, silently judge whether it's satisfactory based on {expected_behavior}"
                     "and clear, then call record_answer with your assessment. If it is NOT "
                     "satisfactory or clear, also fill in follow_up_text with a short, "
                     "specific clarifying question - you'll ask that next.\n"
@@ -314,14 +320,18 @@ def create_closing_node(state: ActiveInterviewState) -> NodeConfig:
 async def _handle_closing(args: FlowArgs, flow_manager: FlowManager):
     state: ActiveInterviewState = flow_manager.state["interview_state"]
     state.record_closing(args["response_text"])
-    return None, create_farewell_node()
+    return None, create_farewell_node(state)
 
 
-def create_farewell_node() -> NodeConfig:
+def create_farewell_node(state: ActiveInterviewState) -> NodeConfig:
     task_messages = [
         {
             "role": "system",
-            "content": "Give a brief, warm closing statement, then say goodbye.",
+            "content": (
+                f'answer the question: by user at the end asked : {state.current_answer_text()} by using the below context of the stage'
+                f'\n**{state.stage_name}**:\n{state.stage_description}'
+                "finally, Give a brief, warm closing statement, then say goodbye."
+                ),
         }
     ] 
 
