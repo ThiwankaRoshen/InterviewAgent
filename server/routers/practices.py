@@ -37,7 +37,7 @@ async def start_bot(
             detail=f"practice attempt with ID {stage_id} does not exist.",
         )
     
-    if False in [crud.practice_attempt_owned_by(db, practice_attempt.id, currentUser.id) 
+    if False in [await crud.practice_attempt_owned_by(db, practice_attempt.id, currentUser.id) 
                  for practice_attempt in practice_attempts] :
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -62,7 +62,7 @@ async def start_bot(
             detail=f"practice attempt with ID {practice_attempt_id} does not exist.",
         )
     
-    if not crud.practice_attempt_owned_by(db, practice_attempt_id, currentUser.id):
+    if not await crud.practice_attempt_owned_by(db, practice_attempt_id, currentUser.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to get Practice Attempt.",
