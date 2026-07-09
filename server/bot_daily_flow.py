@@ -52,6 +52,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # from langsmith_processor import setup_langsmith_tracing
 from langsmith.integrations.pipecat import configure_pipecat, set_thread_id
 from database import AsyncSessionLocal
+import contextlib
 
 load_dotenv(override=True)
 
@@ -60,10 +61,13 @@ async def run_bot(
     transport: DailyTransport,  # Type hint updated
     stage_id: int, 
     practice_attempt_id: int, 
-    db: AsyncSession
+    db: AsyncSession,   
+    stop_event: asyncio.Event | None = None,
 ) -> None:
     """Run the voice bot for this session."""
     logger.info("Starting bot")
+    stop_event = stop_event or asyncio.Event()
+
 
     conversation_id = str(uuid.uuid4())
 
@@ -233,7 +237,34 @@ async def run_bot(
         context_aggregator=context_aggregator,
         transport=transport,
     )
+    _shutdown_done = False
 
+    async def graceful_shutdown(reason: str):
+        """Runs to completion instead of being torn down mid-await."""
+        nonlocal _shutdown_done
+        if _shutdown_done:
+            return
+        _shutdown_done = True
+        logger.info(f"Graceful shutdown starting: {reason}")
+
+        try:
+            await audiobuffer.stop_recording()
+        except Exception:
+            logger.exception("Error stopping recording")
+
+        try:
+            await close_and_persist_interview_stage(active_session, db)
+        except Exception:
+            logger.exception("Error persisting interview stage")
+
+        try:
+            # force_flush is typically sync/blocking — don't block the loop
+            await asyncio.to_thread(span_processor.force_flush, timeout_millis=30000)
+        except Exception:
+            logger.exception("Error flushing LangSmith traces")
+
+        with contextlib.suppress(Exception):
+            await worker.cancel()
     # ═══════════════════════════════════════════════════════════════
     # EVENT HANDLERS - Updated for Daily's event names
     # ═══════════════════════════════════════════════════════════════
@@ -281,13 +312,25 @@ async def run_bot(
     async def on_error(transport, error):
         """Handle Daily transport errors."""
         logger.error(f"Daily transport error: {error}")
+    
+    async def watch_stop_event():
+        await stop_event.wait()
+        await graceful_shutdown("stop_requested")
+
 
     # ═══════════════════════════════════════════════════════════════
     # RUN - Unchanged
     # ═══════════════════════════════════════════════════════════════
-    runner = WorkerRunner(handle_sigint=False)
-    await runner.add_workers(worker)
-    await runner.run()
+    watcher = asyncio.create_task(watch_stop_event())
+
+    try:
+        runner = WorkerRunner(handle_sigint=False)
+        await runner.add_workers(worker)
+        await runner.run()
+    finally:
+        watcher.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await watcher
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -297,7 +340,8 @@ async def run_bot_entrypoint(
     room_url: str,
     token: str,
     stage_id: int, 
-    practice_attempt_id: int
+    practice_attempt_id: int,
+    stop_event: asyncio.Event | None = None,   
 ):
     """
     Entry point called from FastAPI.
@@ -325,7 +369,7 @@ async def run_bot_entrypoint(
     # Fresh DB session that lives as long as the call
     async with AsyncSessionLocal() as db:
         try:
-            await run_bot(transport, stage_id, practice_attempt_id, db)
+            await run_bot(transport, stage_id, practice_attempt_id, db, stop_event)
         except asyncio.CancelledError:
             logger.info("Bot task was cancelled")
         except Exception as e:

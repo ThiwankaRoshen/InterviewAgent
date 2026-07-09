@@ -9,8 +9,16 @@ from auth import CurrentUser
 import crud
 from database import DBSession
 from schemas import PracticeResponse
+from dataclasses import dataclass
 
-active_bots = {}  # room_url -> task
+@dataclass
+class BotSession:
+    task: asyncio.Task
+    stop_event: asyncio.Event
+
+active_bots: dict[str, BotSession] = {}
+
+# active_bots = {}  # room_url -> task
 
 router = APIRouter()
 
@@ -75,18 +83,19 @@ async def start_bot(
         room_url,
         token,
         "STARTED",
-    )    
+    )     
+    stop_event = asyncio.Event()
     task = asyncio.create_task(
         run_bot_entrypoint(
             room_url=room_url,
-            token=token, 
+            token=token,
             stage_id=stage_id,
-            practice_attempt_id=practice_attempt.id        
-            )
+            practice_attempt_id=practice_attempt.id,
+            stop_event=stop_event,
+        )
     )
-    active_bots[room_url] = task
+    active_bots[room_url] = BotSession(task=task, stop_event=stop_event)
     return practice_attempt
-
 
 @router.post("/stop/{practice_attempt_id}")
 async def stop_bot(
@@ -109,7 +118,18 @@ async def stop_bot(
         )
         
     practice_attempt = await crud.stop_practice_attempt(db, practice_attempt_id)
-    active_bots.pop(practice_attempt.room_url).cancel()
+    session = active_bots.pop(practice_attempt.room_url, None)
+
+    if session:
+        session.stop_event.set()
+        try:
+            # shield so our own timeout doesn't cancel the bot's cleanup task directly
+            await asyncio.wait_for(asyncio.shield(session.task), timeout=60)
+        except asyncio.TimeoutError:
+            logger.warning(f"Bot for {practice_attempt.room_url} did not stop in time, force cancelling")
+            session.task.cancel()
+        except Exception:
+            logger.exception("Bot task raised during graceful shutdown")
+
     await delete_daily_room(practice_attempt.room_url)
     return {"status": "stopped"}
-
