@@ -114,6 +114,7 @@ You will be given:
 Guidelines:
 1. Craft a distinct, realistic `interviewer_persona`. The persona must match the domain (e.g., a warm HR Specialist for Culture, a demanding Principal Architect for System Design).
 2. Generate highly contextual questions that directly cross-examine the candidate's resume/strengths or probe into their specific weaknesses, using the CV context provided for this stage.
+   questions should be without any markdown symbols to make sure tts can easily say.
 3. Every question must include an explicit `expected_behavior` playbook detailing what specific signals or anti-patterns to watch out for.
 4. Do not repeat topics relevant to previous or next stages (you're only given previous and next stages names/descriptions, not their CV context, to keep this stage self-contained).
 5. If `stage_requirements` is provided, treat it as a hard constraint (e.g. an exact question count or a required format) and follow it exactly. If it is null, use your own judgement for scope and question count.
