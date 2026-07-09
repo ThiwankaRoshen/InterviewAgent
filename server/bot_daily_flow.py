@@ -87,7 +87,15 @@ async def run_bot(
     # ═══════════════════════════════════════════════════════════════
     # SERVICES - Unchanged
     # ═══════════════════════════════════════════════════════════════
-    stt = AssemblyAISTTService(api_key=os.getenv("ASSEMBLYAI_API_KEY"))
+    stt = AssemblyAISTTService(
+        api_key=os.getenv("ASSEMBLYAI_API_KEY"),
+        settings=AssemblyAISTTService.Settings(
+            model="universal-3-5-pro",   # or "u3-rt-pro" — supports tier-1 language steering
+            language="en",               # locks/steers transcription to English
+            language_detection=False,    # mutually exclusive with language — make sure it's off
+            format_turns=True,
+        ),
+    )
     
     tts = DeepgramTTSService(
         settings=DeepgramTTSService.Settings(
