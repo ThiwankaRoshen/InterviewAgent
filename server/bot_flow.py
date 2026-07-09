@@ -214,10 +214,15 @@ def create_question_node(
 
     Context strategy:
       - APPEND when this is a follow-up (`state.is_followup` is True), so the
-        LLM still has the prior main question + candidate answer in context
-        and can naturally reference it (e.g. "You mentioned code style earlier...").
-      - RESET when this is a fresh planned question, so the LLM starts with a
-        clean slate and has no memory of earlier questions/answers.
+        LLM still has the full prior main question + candidate answer verbatim
+        in context and can naturally reference it (e.g. "You mentioned code
+        style earlier...").
+      - RESET_WITH_SUMMARY when this is a fresh planned question. Rather than
+        a totally blank slate, the LLM gets a concise, LLM-generated summary
+        of everything covered so far instead of the raw transcript. This
+        keeps token usage down and avoids the model anchoring on earlier
+        exact wording, while still letting the interviewer sound like it
+        has some continuity/awareness across questions.
     """
     question_text = state.current_question_text()
     expected_behavior = state.current_expected_behavior()
@@ -262,7 +267,17 @@ def create_question_node(
             }
         ],
         context_strategy=ContextStrategyConfig(
-            strategy=ContextStrategy.APPEND if state.is_followup else ContextStrategy.RESET,
+            strategy=ContextStrategy.APPEND if state.is_followup else ContextStrategy.RESET_WITH_SUMMARY,
+            summary_prompt=(
+                None
+                if state.is_followup
+                else (
+                    "Summarize the interview so far in a few concise sentences: which "
+                    "topics/questions have been covered, the key points the candidate "
+                    "made, and a brief read on their confidence and delivery. Do not "
+                    "include verbatim quotes."
+                )
+            ),
         ),
         functions=[
             FlowsFunctionSchema(
