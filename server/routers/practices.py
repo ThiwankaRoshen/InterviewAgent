@@ -22,6 +22,31 @@ active_bots: dict[str, BotSession] = {}
 
 router = APIRouter()
 
+@router.get("/{stage_id}", response_model=list[PracticeResponse])
+async def start_bot(  
+    stage_id: int,
+    db: DBSession,
+    currentUser: CurrentUser,
+    ):
+    
+    practice_attempts = await crud.get_practice_attempts(db, stage_id)
+    
+    if not practice_attempts:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"practice attempt with ID {stage_id} does not exist.",
+        )
+    
+    if False in [crud.practice_attempt_owned_by(db, practice_attempt.id, currentUser.id) 
+                 for practice_attempt in practice_attempts] :
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to get Practice Attempt.",
+        )
+        
+    return practice_attempts 
+
+
 @router.get("/{practice_attempt_id}", response_model=PracticeResponse)
 async def start_bot(  
     practice_attempt_id: int,
@@ -34,10 +59,10 @@ async def start_bot(
     if not practice_attempt:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"practice attempt with ID {practice_attempt} does not exist.",
+            detail=f"practice attempt with ID {practice_attempt_id} does not exist.",
         )
     
-    if not crud.practice_attempt_own_by(currentUser.id):
+    if not crud.practice_attempt_owned_by(db, practice_attempt_id, currentUser.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to get Practice Attempt.",

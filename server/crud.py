@@ -165,6 +165,19 @@ async def get_practice_attempt(
 
     return result.scalar_one_or_none()
 
+async def get_practice_attempts(
+    db: AsyncSession,
+    stage_id: int,
+) -> models.PracticeAttempt | None:
+
+    results = await db.execute(
+        select(models.PracticeAttempt).where(
+            models.PracticeAttempt.stage_id == stage_id
+        )
+    )
+
+    return results.scalars().all()
+
 async def stop_practice_attempt(
     db: AsyncSession,
     practice_attempt_id: int,
