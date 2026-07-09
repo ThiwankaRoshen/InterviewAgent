@@ -39,6 +39,8 @@ class ActiveInterviewState:
         self.is_followup = False
         self.followup_text: Optional[str] = None
         self.answers_log: List[Dict[str, Any]] = []
+        self.followup_count = 0
+        self.max_followups_per_question = 1
 
     # -- read helpers -----------------------------------------------------
     def current_question_text(self) -> str:
@@ -80,11 +82,13 @@ class ActiveInterviewState:
     def set_followup(self, followup_text: str) -> None:
         self.is_followup = True
         self.followup_text = followup_text
+        self.followup_count += 1
 
     def advance(self) -> None:
         self.is_followup = False
         self.followup_text = None
         self.current_index += 1
+        self.followup_count = 0
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -265,8 +269,11 @@ async def _handle_record_answer(args: FlowArgs, flow_manager: FlowManager):
         confidence=args["confidence"],
         pacing=args["pacing"],
     )
+    
+    wants_followup = not args.get("satisfactory", True)
+    can_still_follow_up = state.followup_count < state.max_followups_per_question
 
-    if not args.get("satisfactory", True):
+    if wants_followup and can_still_follow_up:
         follow_up = args.get("follow_up_text") or "Could you clarify or expand on that a bit more?"
         state.set_followup(follow_up)
         logger.info(f"Answer not satisfactory, asking follow-up: {follow_up}")
