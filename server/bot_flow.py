@@ -53,10 +53,7 @@ class ActiveInterviewState:
             return "This was a follow-up question by the interviewer."
         return self.master_questions[self.current_index].get("expected_behavior", "")
 
-    def current_answer_text(self) -> str: 
-        return self.master_questions[self.current_index].get("answer_text", "")
-
-
+    
     def has_more_questions(self) -> bool:
         return self.current_index < len(self.master_questions)
 
@@ -82,6 +79,10 @@ class ActiveInterviewState:
                 "expected_behavior": "Closing remarks",
             }
         )
+        
+    def get_closing_question_text(self) -> str: 
+        return self.answers_log[-1]["answer_text"] if self.answers_log else ""
+
 
     def set_followup(self, followup_text: str) -> None:
         self.is_followup = True
@@ -328,10 +329,12 @@ def create_farewell_node(state: ActiveInterviewState) -> NodeConfig:
         {
             "role": "system",
             "content": (
-                f'answer the question: by user at the end asked : {state.current_answer_text()} by using the below context of the stage'
-                f'\n**{state.stage_name}**:\n{state.stage_description}'
-                "finally, Give a brief, warm closing statement, then say goodbye."
-                ),
+                'The candidate was asked "Do you have any questions for me?" and responded: '
+                f'{state.get_closing_question_text()} by using the below context of the stage'
+                'Answer their question/response using the context below.\n'
+                f'**{state.stage_name}**:\n{state.stage_description}\n\n'
+                "Finally, give a brief, warm closing statement, then say goodbye."
+            ),
         }
     ] 
 
