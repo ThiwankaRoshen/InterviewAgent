@@ -7,6 +7,13 @@ import asyncio
 from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
+from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
+from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
+from pipecat.turns.user_start import MinWordsUserTurnStartStrategy, TranscriptionUserTurnStartStrategy
+from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
+
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -15,7 +22,10 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMUserAggregatorParams,
     LLMAssistantAggregatorParams
 )  
-
+from pipecat.utils.context.llm_context_summarization import (
+    LLMAutoContextSummarizationConfig,
+    LLMContextSummaryConfig,
+)
 
 from pipecat.flows import FlowManager
 
@@ -28,7 +38,10 @@ from bot_flow import (
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.services.assemblyai.stt import AssemblyAISTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
-from pipecat.services.openai.llm import OpenAILLMService 
+# from pipecat.services.openai.llm import OpenAILLMService 
+# from pipecat.services.nvidia.llm import NvidiaLLMService
+from pipecat.services.google.llm import GoogleLLMService
+
 from pipecat.workers.runner import WorkerRunner
 
 from pipecat.transports.daily.transport import DailyTransport, DailyParams
@@ -81,26 +94,79 @@ async def run_bot(
         api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
     
-    llm = OpenAILLMService(
-        settings=OpenAILLMService.Settings(
-            model=os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini"),
+    # llm = OpenAILLMService(
+    #     settings=OpenAILLMService.Settings(
+    #         model=os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini"),
+    #     ),
+    #     api_key=os.getenv("GITHUB_TOKEN"),
+    #     base_url="https://models.github.ai/inference",
+    # ) 
+    # llm = NvidiaLLMService(
+    #     api_key=os.getenv("NVIDIA_API_KEY"),
+    #     settings=NvidiaLLMService.Settings(
+    #         model="nvidia/nemotron-3-nano-30b-a3b",
+    #     ), 
+    #     # base_url defaults to https://integrate.api.nvidia.com/v1
+    # )
+    
+
+    llm = GoogleLLMService(
+        api_key=os.getenv("GOOGLE_API_KEY"),
+        settings=GoogleLLMService.Settings(
+            model="gemini-2.5-flash",  # good balance of speed/cost for voice
         ),
-        api_key=os.getenv("GITHUB_TOKEN"),
-        base_url="https://models.github.ai/inference",
-    ) 
+    )
     
     active_session = await initialize_active_session_state(
         stage_id, practice_attempt_id, db
     )
+    
+    # ═══════════════════════════════════════════════════════════════
+    # TURN TAKING
+    # ═══════════════════════════════════════════════════════════════
+    vad_analyzer = SileroVADAnalyzer(
+        params=VADParams(
+            confidence=0.7,
+            start_secs=0.2,   # default; lower to ~0.15 only if short "yes"/"no" get missed
+            stop_secs=0.2,    # keep short — Smart Turn (below) handles the "are they really done" call
+            min_volume=0.6,
+        )
+    )
+
+    turn_analyzer = LocalSmartTurnAnalyzerV3(
+        params=SmartTurnParams(
+            stop_secs=2.5,        # hard fallback: if Smart Turn stays "incomplete" this long, end the turn anyway
+            pre_speech_ms=200,
+            max_duration_secs=8,
+        )
+    )
+
 
     context = LLMContext()  # Flows manages messages/tools per-node; start empty
     context_aggregator = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(),
+            vad_analyzer=vad_analyzer,
+            user_turn_strategies=UserTurnStrategies(
+                start=[
+                    MinWordsUserTurnStartStrategy(min_words=2),  # candidate must say ≥2 words before it counts as "taking the turn" / interrupting the bot
+                    TranscriptionUserTurnStartStrategy(),        # fallback so short "no"/"yes" answers aren't dropped if VAD misses them
+                ],
+                stop=[
+                    TurnAnalyzerUserTurnStopStrategy(turn_analyzer=turn_analyzer),
+                ],
+            ),
         ),
         assistant_params=LLMAssistantAggregatorParams(
             enable_auto_context_summarization=True,
+            # auto_context_summarization_config=LLMAutoContextSummarizationConfig(
+            #     max_context_tokens=None,       # generous headroom for a single interview
+            #     max_unsummarized_messages=40,   # don't trigger mid-question-cycle
+            #     summary_config=LLMContextSummaryConfig(
+            #         target_context_tokens=8000,
+            #         min_messages_after_summary=6,  # keep the current Q&A cycle intact
+            #     ),
+            # ),
         ),
     )
     
@@ -208,7 +274,6 @@ async def run_bot_entrypoint(
             audio_in_enabled=True,      # Hear the user
             audio_out_enabled=True,     # Speak to the user
             camera_out_enabled=False,   # No video from bot
-            vad_analyzer=SileroVADAnalyzer(),
         ),
     )
 
