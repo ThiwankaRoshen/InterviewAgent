@@ -145,8 +145,11 @@ async def close_and_persist_interview_stage(
 
 
 def create_greeting_node(state: ActiveInterviewState) -> NodeConfig:
+    question_text = state.current_question_text()
+    expected_behavior = state.current_expected_behavior()
+
     return NodeConfig(
-        name="greeting",
+        name="greeting_and_first_question",
         role_messages=[
             {
                 "role": "system",
@@ -162,31 +165,69 @@ def create_greeting_node(state: ActiveInterviewState) -> NodeConfig:
                 "role": "system",
                 "content": (
                     "Greet the candidate warmly, briefly introduce yourself, and let them "
-                    f"know the interview is about using these notes\n**{state.stage_name}**:{state.stage_description} \n" 
-                    "and is about to begin. Do NOT ask the first interview "
-                    "question yourself, and do not reveal how you'll be evaluating them. "
-                    "As soon as you're done greeting them, call begin_interview."
+                    f"know the interview is about using these notes\n**{state.stage_name}**:"
+                    f"{state.stage_description}\n"
+                    "and is about to begin. Do NOT reveal how you'll be evaluating them.\n\n"
+                    "Then, in the SAME turn, immediately ask this exact question, word for "
+                    f'word, and nothing else: "{question_text}"\n\n'
+                    "Do not paraphrase it, soften it, add commentary, or ask more than one "
+                    "question. Then wait for the candidate to answer.\n\n"
+                    "- If the candidate asks you to repeat the question (or clearly didn't "
+                    "hear it), call repeat_question.\n"
+                    f"- Once they give an answer, silently judge whether it's satisfactory "
+                    f"based on {expected_behavior} and clear, then call record_answer with "
+                    "your assessment. If it is NOT satisfactory or clear, also fill in "
+                    "follow_up_text with a short, specific clarifying question - you'll ask "
+                    "that next.\n"
+                    "- Never invent a new planned question yourself; only these two tools "
+                    "exist for a reason."
                 ),
             }
         ],
         functions=[
             FlowsFunctionSchema(
-                name="begin_interview",
+                name="record_answer",
                 description=(
-                    "Call this immediately after greeting the candidate, to move on to "
-                    "the first interview question."
+                    "Log the candidate's answer and delivery metrics, and say whether "
+                    "the answer was satisfactory."
                 ),
+                properties={
+                    "answer_text": {
+                        "type": "string",
+                        "description": "What the candidate said, in their own words.",
+                    },
+                    "confidence": {
+                        "type": "string",
+                        "description": "Perceived confidence, e.g. low / medium / high.",
+                    },
+                    "pacing": {
+                        "type": "string",
+                        "description": "Perceived pacing/delivery, e.g. rushed / steady / slow.",
+                    },
+                    "satisfactory": {
+                        "type": "boolean",
+                        "description": "True if the answer sufficiently addresses the question.",
+                    },
+                    "follow_up_text": {
+                        "type": "string",
+                        "description": (
+                            "Only set when satisfactory=false: the exact follow-up "
+                            "question to ask the candidate next."
+                        ),
+                    },
+                },
+                required=["answer_text", "confidence", "pacing", "satisfactory"],
+                handler=_handle_record_answer,
+            ),
+            FlowsFunctionSchema(
+                name="repeat_question",
+                description="Call when the candidate asks you to repeat the current question.",
                 properties={},
                 required=[],
-                handler=_handle_begin_interview,
-            )
+                handler=_handle_repeat_question,
+            ),
         ],
     )
-
-
-async def _handle_begin_interview(args: FlowArgs, flow_manager: FlowManager):
-    state: ActiveInterviewState = flow_manager.state["interview_state"]
-    return None, create_question_node(state)
 
 
 def create_question_node(state: ActiveInterviewState) -> NodeConfig:
