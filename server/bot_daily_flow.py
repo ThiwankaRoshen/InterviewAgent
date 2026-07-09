@@ -38,9 +38,11 @@ from bot_flow import (
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.services.assemblyai.stt import AssemblyAISTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
-# from pipecat.services.openai.llm import OpenAILLMService 
+from pipecat.services.openai.llm import OpenAILLMService 
 # from pipecat.services.nvidia.llm import NvidiaLLMService
-from pipecat.services.google.llm import GoogleLLMService
+# from pipecat.services.google.llm import GoogleLLMService
+# from pipecat.services.groq.llm import GroqLLMService
+# from pipecat.services.openrouter.llm import OpenRouterLLMService
 
 from pipecat.workers.runner import WorkerRunner
 
@@ -94,13 +96,14 @@ async def run_bot(
         api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
     
-    # llm = OpenAILLMService(
-    #     settings=OpenAILLMService.Settings(
-    #         model=os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini"),
-    #     ),
-    #     api_key=os.getenv("GITHUB_TOKEN"),
-    #     base_url="https://models.github.ai/inference",
-    # ) 
+    llm = OpenAILLMService(
+        settings=OpenAILLMService.Settings(
+            model=os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini"),
+        ),
+        api_key=os.getenv("GITHUB_TOKEN"),
+        base_url="https://models.github.ai/inference",
+    ) 
+    
     # llm = NvidiaLLMService(
     #     api_key=os.getenv("NVIDIA_API_KEY"),
     #     settings=NvidiaLLMService.Settings(
@@ -110,12 +113,28 @@ async def run_bot(
     # )
     
 
-    llm = GoogleLLMService(
-        api_key=os.getenv("GOOGLE_API_KEY"),
-        settings=GoogleLLMService.Settings(
-            model="gemini-2.5-flash",  # good balance of speed/cost for voice
-        ),
-    )
+    # llm = GoogleLLMService(
+    #     api_key=os.getenv("GOOGLE_API_KEY"),
+    #     settings=GoogleLLMService.Settings(
+    #         model="gemini-2.5-flash",  # good balance of speed/cost for voice
+    #     ),
+    # )
+    
+
+    # llm = GroqLLMService(
+    #     api_key=os.getenv("GROQ_API_KEY"),
+    #     settings=GroqLLMService.Settings(
+    #         model="openai/gpt-oss-120b",
+    #         # model="llama-3.3-70b-versatile",
+    #     ),
+    # )   
+
+    # llm = OpenRouterLLMService(
+    #     api_key=os.getenv("OPENROUTER_API_KEY"),
+    #     settings=OpenRouterLLMService.Settings(
+    #         model="openrouter/free",
+    #     ),
+    # )
     
     active_session = await initialize_active_session_state(
         stage_id, practice_attempt_id, db
@@ -158,7 +177,7 @@ async def run_bot(
             ),
         ),
         assistant_params=LLMAssistantAggregatorParams(
-            enable_auto_context_summarization=True,
+            enable_auto_context_summarization=False,
             # auto_context_summarization_config=LLMAutoContextSummarizationConfig(
             #     max_context_tokens=None,       # generous headroom for a single interview
             #     max_unsummarized_messages=40,   # don't trigger mid-question-cycle

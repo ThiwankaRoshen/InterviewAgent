@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "opentelemetry-exporter-otlp>=1.43.0",
     # "pipecat-ai[assemblyai,daily,deepgram,openai,runner,silero,webrtc]>=1.4.0",
-    "pipecat-ai[assemblyai,deepgram,openai,runner,silero,webrtc]>=1.5.0",
+    "pipecat-ai[assemblyai,deepgram,google,groq,nvidia,openai,openrouter,runner,silero,webrtc]>=1.5.0",
     "pipecatcloud",
     "pydantic-settings>=2.14.2",
     "aiosqlite>=0.22.1",

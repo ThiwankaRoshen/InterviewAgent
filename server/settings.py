@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     GITHUB_TOKEN_INTERVIEW_GEN: str 
     MISTRAL_API_KEY: str
     MISTRAL_MODEL: str
+    NVIDIA_API_KEY: str
+    GOOGLE_API_KEY: str
+    GROQ_API_KEY: str
+    OPENROUTER_API_KEY: str
     
     ASSEMBLYAI_API_KEY: str
     DEEPGRAM_API_KEY: str
