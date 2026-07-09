@@ -9,6 +9,15 @@ export interface StartPracticeResponse {
   pdf_results_path: string
 }
 
+export interface PracticeAttempt {
+  id: number
+  room_url: string
+  token: string
+  status: string
+  md_results_path: string
+  pdf_results_path: string
+}
+
 export interface PracticeSession {
   stageId: number
   practiceAttemptId: number | null

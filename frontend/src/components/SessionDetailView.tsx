@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { generateSessionStages } from '../services/sessionService'
+import { getPracticeAttemptsForStage } from '../services/practiceService'
 import { PracticeSessionView } from './PracticeSessionView'
 import { StageItemCard } from './StageItemCard'
 import { usePracticeSession } from '../hooks/usePracticeSession'
+import type { PracticeAttempt } from '../types/practice'
 import type { SessionDetail, StageItem } from '../types/session'
 
 interface SessionDetailViewProps {
@@ -31,6 +33,19 @@ function buildWebSocketUrl(sessionId: number) {
   return `${baseUrl}/ws/session/${sessionId}`
 }
 
+function buildResourceUrl(path: string) {
+  if (!path) {
+    return ''
+  }
+
+  if (/^https?:\/\//i.test(path)) {
+    return path
+  }
+
+  const baseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+  return `${baseUrl}/${path.replace(/^\/+/, '')}`
+}
+
 export function SessionDetailView({
   session,
   loading,
@@ -52,16 +67,52 @@ export function SessionDetailView({
   const [generationError, setGenerationError] = useState('')
   const [progressStep, setProgressStep] = useState('')
   const [progressPercent, setProgressPercent] = useState(0)
+  const [practiceAttempts, setPracticeAttempts] = useState<PracticeAttempt[]>([])
+  const [attemptsLoading, setAttemptsLoading] = useState(false)
+  const [attemptsError, setAttemptsError] = useState('')
   const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
+    if (!selectedStage || !token || practiceSessions) {
+      setPracticeAttempts([])
+      setAttemptsError('')
+      setAttemptsLoading(false)
+      return
+    }
+
+    let cancelled = false
+
+    const loadAttempts = async () => {
+      setAttemptsLoading(true)
+      setAttemptsError('')
+
+      try {
+        const attempts = await getPracticeAttemptsForStage(token, selectedStage.id)
+        if (!cancelled) {
+          setPracticeAttempts(attempts)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPracticeAttempts([])
+          setAttemptsError(error instanceof Error ? error.message : 'Unable to load previous practice attempts.')
+        }
+      } finally {
+        if (!cancelled) {
+          setAttemptsLoading(false)
+        }
+      }
+    }
+
+    void loadAttempts()
+
     return () => {
+      cancelled = true
       if (socketRef.current) {
         socketRef.current.close()
         socketRef.current = null
       }
     }
-  }, [])
+  }, [selectedStage?.id, token, practiceSessions])
 
   const closeSocket = () => {
     if (socketRef.current) {
@@ -214,14 +265,58 @@ export function SessionDetailView({
         <p className="detail-panel__text">{selectedStage.stage_description}</p>
 
         {practiceError ? <div className="feedback error">{practiceError}</div> : null}
+        {attemptsError ? <div className="feedback error">{attemptsError}</div> : null}
+
+        {attemptsLoading ? <p className="empty-state">Loading previous attempts…</p> : null}
+
+        {practiceAttempts.length > 0 ? (
+          <div>
+            <h4>Previous attempts</h4>
+            <div>
+              {practiceAttempts.map((attempt) => {
+                const normalizedStatus = (attempt.status || '').toLowerCase()
+                const canDownload = normalizedStatus === 'stopped' || normalizedStatus === 'completed' || normalizedStatus === 'failed'
+
+                return (
+                  <div key={attempt.id} style={{ border: '1px solid #d8dce6', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                      <strong>Attempt #{attempt.id}</strong>
+                      <span>{attempt.status}</span>
+                    </div>
+                    <p style={{ margin: '8px 0 0' }}>Room: {attempt.room_url}</p>
+                    {canDownload ? (
+                      <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+                        {attempt.md_results_path ? (
+                          <a href={buildResourceUrl(attempt.md_results_path)} target="_blank" rel="noopener noreferrer">
+                            Download Markdown
+                          </a>
+                        ) : null}
+                        {attempt.pdf_results_path ? (
+                          <a href={buildResourceUrl(attempt.pdf_results_path)} target="_blank" rel="noopener noreferrer">
+                            Download PDF
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ) : null}
+
+        {!attemptsLoading && practiceAttempts.length === 0 ? (
+          <p className="empty-state">No previous attempts yet. Start a new one to begin.</p>
+        ) : null}
 
         <button
           type="button"
           className="primary-btn"
           onClick={() => void handleStartPractice()}
-          disabled={practiceLoading}
+          disabled={practiceLoading || attemptsLoading}
+          style={{ marginTop: 16 }}
         >
-          {practiceLoading ? 'Starting Interview…' : 'Start Interview Practice'}
+          {practiceLoading ? 'Starting Interview…' : 'Start New Attempt'}
         </button>
       </div>
     )
