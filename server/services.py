@@ -1,11 +1,12 @@
 import json
 
-from langchain_mistralai import ChatMistralAI
 import schemas
 import asyncio
 import os
 from typing import List
 from langchain_openai import ChatOpenAI
+from langchain_mistralai import ChatMistralAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 import models
 from cv_parser import parse_using_pymupdf, LangChainResumeParser
@@ -28,15 +29,28 @@ async def create_interview_session_service(
     # Initialize LLM
     await manager.send_progress(session_id, "Initializing AI models", 5)
     
-    base_llm = ChatMistralAI(
+    cv_base_llm = ChatMistralAI(
         model=settings.MISTRAL_MODEL,
         temperature=0,
         max_retries=2,
         mistral_api_key=settings.MISTRAL_API_KEY
     )
-    
+
+    # base_llm = ChatGoogleGenerativeAI(
+    #     model="gemini-2.5-flash",  # Or "gemini-3.5-flash" depending on your preferred version
+    #     temperature=0,
+    #     max_retries=2,
+    #     google_api_key=settings.GOOGLE_API_KEY
+    # )
+
+    base_llm = ChatOpenAI(
+                base_url=settings.BASE_URL_INTERVIEW_GEN,
+                model=settings.MODEL_INTERVIEW_GEN,
+                temperature=0,
+                api_key=settings.GITHUB_TOKEN_INTERVIEW_GEN,
+            )     
     planner_llm = base_llm.with_structured_output(InterviewPlanSkeleton)
-    cv_context_llm = base_llm.with_structured_output(StageCvContext)
+    cv_context_llm = cv_base_llm.with_structured_output(StageCvContext)
     stage_llm = base_llm.with_structured_output(StageGeneration)
     
     orchestrator = InterviewOrchestrator(

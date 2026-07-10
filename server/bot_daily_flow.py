@@ -40,7 +40,7 @@ from pipecat.services.assemblyai.stt import AssemblyAISTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
 from pipecat.services.openai.llm import OpenAILLMService 
 # from pipecat.services.nvidia.llm import NvidiaLLMService
-# from pipecat.services.google.llm import GoogleLLMService
+from pipecat.services.google.llm import GoogleLLMService
 # from pipecat.services.groq.llm import GroqLLMService
 # from pipecat.services.openrouter.llm import OpenRouterLLMService
 
@@ -113,13 +113,13 @@ async def run_bot(
         api_key=os.getenv("DEEPGRAM_API_KEY"),
     )
     
-    llm = OpenAILLMService(
-        settings=OpenAILLMService.Settings(
-            model=os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini"),
-        ),
-        api_key=os.getenv("GITHUB_TOKEN"),
-        base_url="https://models.github.ai/inference",
-    ) 
+    # llm = OpenAILLMService(
+    #     settings=OpenAILLMService.Settings(
+    #         model=os.getenv("OPENAI_MODEL", "openai/gpt-4o-mini"),
+    #     ),
+    #     api_key=os.getenv("GITHUB_TOKEN"),
+    #     base_url="https://models.github.ai/inference",
+    # ) 
     
     # llm = NvidiaLLMService(
     #     api_key=os.getenv("NVIDIA_API_KEY"),
@@ -130,12 +130,12 @@ async def run_bot(
     # )
     
 
-    # llm = GoogleLLMService(
-    #     api_key=os.getenv("GOOGLE_API_KEY"),
-    #     settings=GoogleLLMService.Settings(
-    #         model="gemini-2.5-flash",  # good balance of speed/cost for voice
-    #     ),
-    # )
+    llm = GoogleLLMService(
+        api_key=os.getenv("GOOGLE_API_KEY"),
+        settings=GoogleLLMService.Settings(
+            model="gemini-3.5-flash",  # good balance of speed/cost for voice
+        ),
+    )
     
 
     # llm = GroqLLMService(

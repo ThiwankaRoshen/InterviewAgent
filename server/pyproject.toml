@@ -37,6 +37,8 @@ dependencies = [
     "reportlab>=5.0.0",
     "markdown2>=2.5.5",
     "tiktoken>=0.13.0",
+    "langchain-google-genai>=4.2.7",
+    "weasyprint>=69.0",
 ]
 
 [dependency-groups]

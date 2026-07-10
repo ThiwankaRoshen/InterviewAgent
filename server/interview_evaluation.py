@@ -1,9 +1,9 @@
 from datetime import datetime, UTC
 from pathlib import Path
 
-# from langchain_mistralai import ChatMistralAI
+from langchain_mistralai import ChatMistralAI
 # from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import ChatOpenAI
+# from langchain_openai import ChatOpenAI
 
 from interview_evaluation_utils import markdown_to_pdf
 from settings import settings
@@ -13,12 +13,12 @@ async def trigger_stage_evaluation_pipeline(active_session):
     Evaluate interview answers and generate a markdown report + PDF.
     """
 
-    # llm = ChatMistralAI(
-    #     model=settings.MISTRAL_MODEL,
-    #     temperature=0,
-    #     max_retries=2,
-    #     mistral_api_key=settings.MISTRAL_API_KEY
-    # )
+    llm = ChatMistralAI(
+        model=settings.MISTRAL_MODEL,
+        temperature=0,
+        max_retries=2,
+        mistral_api_key=settings.MISTRAL_API_KEY
+    )
     
 
     # Inside your class setup:
@@ -28,12 +28,12 @@ async def trigger_stage_evaluation_pipeline(active_session):
     #     max_retries=2,
     #     google_api_key=settings.GOOGLE_API_KEY
     # )
-    llm = ChatOpenAI(
-            base_url=settings.BASE_URL_INTERVIEW_GEN,
-            model=settings.MODEL_INTERVIEW_GEN,
-            temperature=0,
-            api_key=settings.GITHUB_TOKEN_INTERVIEW_GEN,
-        ) 
+    # llm = ChatOpenAI(
+    #         base_url=settings.BASE_URL_INTERVIEW_GEN,
+    #         model=settings.MODEL_INTERVIEW_GEN,
+    #         temperature=0,
+    #         api_key=settings.GITHUB_TOKEN_INTERVIEW_GEN,
+    #     ) 
 
     interview_text = ""
 
