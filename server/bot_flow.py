@@ -267,7 +267,7 @@ def create_question_node(
             }
         ],
         context_strategy=ContextStrategyConfig(
-            strategy=ContextStrategy.APPEND if state.is_followup else ContextStrategy.RESET_WITH_SUMMARY,
+            strategy=ContextStrategy.APPEND if (state.is_followup or is_first) else ContextStrategy.RESET_WITH_SUMMARY,
             summary_prompt=(
                 None
                 if state.is_followup
@@ -354,7 +354,12 @@ def create_closing_node(state: ActiveInterviewState) -> NodeConfig:
                 ),
             }
         ],
-        context_strategy=ContextStrategyConfig(strategy=ContextStrategy.RESET),
+        context_strategy=ContextStrategyConfig(strategy=ContextStrategy.RESET_WITH_SUMMARY,
+            summary_prompt=(
+                "Summarize the candidate's answers to all interview questions, "
+                "including their confidence and delivery. Focus on the key points "
+                "they made and any follow‑up clarifications."
+            ),),
         functions=[
             FlowsFunctionSchema(
                 name="record_closing_remarks",
@@ -369,8 +374,7 @@ def create_closing_node(state: ActiveInterviewState) -> NodeConfig:
 
 def create_farewell_node(state: ActiveInterviewState) -> NodeConfig:
     """
-    Context strategy: RESET_WITH_SUMMARY. The LLM's history is wiped and
-    replaced with a concise summary of the whole interview, so the farewell
+    Context strategy: APPEND. The LLM's history is appended, so the farewell
     message can be informed by everything the candidate said without
     carrying the full raw transcript into context.
     """
@@ -402,12 +406,12 @@ def create_farewell_node(state: ActiveInterviewState) -> NodeConfig:
             }
         ],
         context_strategy=ContextStrategyConfig(
-            strategy=ContextStrategy.RESET_WITH_SUMMARY,
-            summary_prompt=(
-                "Summarize the candidate's answers to all interview questions, "
-                "including their confidence and delivery. Focus on the key points "
-                "they made and any follow‑up clarifications."
-            ),
+            strategy=ContextStrategy.APPEND,
+            # summary_prompt=(
+            #     "Summarize the candidate's answers to all interview questions, "
+            #     "including their confidence and delivery. Focus on the key points "
+            #     "they made and any follow‑up clarifications."
+            # ),
         ),
         post_actions=[{"type": "end_conversation"}],
     )

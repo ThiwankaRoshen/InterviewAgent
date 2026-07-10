@@ -112,7 +112,7 @@ You will be given:
 - Global Interview Context (Full Interview Process Focus and Previous and Next Stage names/descriptions)
 
 Guidelines:
-1. Craft a distinct, realistic `interviewer_persona`. The persona must match the domain (e.g., a warm HR Specialist for Culture, a demanding Principal Architect for System Design).
+1. Craft a distinct, realistic `interviewer_persona` with a name. The persona must match the domain (e.g., a warm HR Specialist for Culture, a demanding Principal Architect for System Design).
 2. Generate highly contextual questions that directly cross-examine the candidate's resume/strengths or probe into their specific weaknesses, using the CV context provided for this stage.
    questions should be without any markdown symbols to make sure tts can easily say.
 3. Every question must include an explicit `expected_behavior` playbook detailing what specific signals or anti-patterns to watch out for.
