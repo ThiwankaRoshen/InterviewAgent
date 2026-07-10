@@ -39,8 +39,8 @@ from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from pipecat.services.assemblyai.stt import AssemblyAISTTService
 from pipecat.services.deepgram.tts import DeepgramTTSService
 from pipecat.services.openai.llm import OpenAILLMService 
-# from pipecat.services.nvidia.llm import NvidiaLLMService
-from pipecat.services.google.llm import GoogleLLMService
+from pipecat.services.nvidia.llm import NvidiaLLMService
+# from pipecat.services.google.llm import GoogleLLMService
 # from pipecat.services.groq.llm import GroqLLMService
 # from pipecat.services.openrouter.llm import OpenRouterLLMService
 
@@ -121,21 +121,22 @@ async def run_bot(
     #     base_url="https://models.github.ai/inference",
     # ) 
     
-    # llm = NvidiaLLMService(
-    #     api_key=os.getenv("NVIDIA_API_KEY"),
-    #     settings=NvidiaLLMService.Settings(
-    #         model="nvidia/nemotron-3-nano-30b-a3b",
-    #     ), 
-    #     # base_url defaults to https://integrate.api.nvidia.com/v1
-    # )
+    llm = NvidiaLLMService(
+        api_key=os.getenv("NVIDIA_API_KEY"),
+        settings=NvidiaLLMService.Settings(
+            model="nvidia/nemotron-3-ultra-550b-a55b",
+            # model="nvidia/nemotron-3-nano-30b-a3b",
+        ), 
+        # base_url defaults to https://integrate.api.nvidia.com/v1
+    )
     
 
-    llm = GoogleLLMService(
-        api_key=os.getenv("GOOGLE_API_KEY"),
-        settings=GoogleLLMService.Settings(
-            model="gemini-2.5-flash",  # good balance of speed/cost for voice
-        ),
-    )
+    # llm = GoogleLLMService(
+    #     api_key=os.getenv("GOOGLE_API_KEY"),
+    #     settings=GoogleLLMService.Settings(
+    #         model="gemini-2.5-flash",  # good balance of speed/cost for voice
+    #     ),
+    # )
     
 
     # llm = GroqLLMService(
