@@ -22,8 +22,8 @@ active_bots: dict[str, BotSession] = {}
 
 router = APIRouter()
 
-@router.get("/{stage_id}", response_model=list[PracticeResponse])
-async def start_bot(  
+@router.get("{stage_id}/attempts", response_model=list[PracticeResponse])
+async def get_past_attempts(  
     stage_id: int,
     db: DBSession,
     currentUser: CurrentUser,
@@ -48,7 +48,7 @@ async def start_bot(
 
 
 @router.get("/{practice_attempt_id}", response_model=PracticeResponse)
-async def start_bot(  
+async def get_attempt(  
     practice_attempt_id: int,
     db: DBSession,
     currentUser: CurrentUser,

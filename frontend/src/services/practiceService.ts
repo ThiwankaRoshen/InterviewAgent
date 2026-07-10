@@ -8,7 +8,7 @@ async function parseErrorMessage(response: Response): Promise<string> {
 }
 
 export async function getPracticeAttemptsForStage(token: string, stageId: number): Promise<PracticeAttempt[]> {
-  const response = await fetch(`${API_BASE_URL}/api/practices/${stageId}`, {
+  const response = await fetch(`${API_BASE_URL}/api/practices/${stageId}/attempts`, {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
