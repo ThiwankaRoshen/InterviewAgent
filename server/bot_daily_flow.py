@@ -133,7 +133,7 @@ async def run_bot(
     llm = GoogleLLMService(
         api_key=os.getenv("GOOGLE_API_KEY"),
         settings=GoogleLLMService.Settings(
-            model="gemini-3.5-flash",  # good balance of speed/cost for voice
+            model="gemini-2.5-flash",  # good balance of speed/cost for voice
         ),
     )
     

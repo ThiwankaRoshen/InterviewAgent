@@ -269,6 +269,10 @@ export function SessionDetailView({
 
         {attemptsLoading ? <p className="empty-state">Loading previous attempts…</p> : null}
 
+        {!attemptsLoading && practiceAttempts.length === 0 ? (
+          <p className="empty-state">No previous attempts yet. Start a new one to begin.</p>
+        ) : null}
+
         {practiceAttempts.length > 0 ? (
           <div>
             <h4>Previous attempts</h4>
@@ -303,10 +307,6 @@ export function SessionDetailView({
               })}
             </div>
           </div>
-        ) : null}
-
-        {!attemptsLoading && practiceAttempts.length === 0 ? (
-          <p className="empty-state">No previous attempts yet. Start a new one to begin.</p>
         ) : null}
 
         <button

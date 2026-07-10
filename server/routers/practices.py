@@ -22,7 +22,7 @@ active_bots: dict[str, BotSession] = {}
 
 router = APIRouter()
 
-@router.get("{stage_id}/attempts", response_model=list[PracticeResponse])
+@router.get("/{stage_id}/attempts", response_model=list[PracticeResponse])
 async def get_past_attempts(  
     stage_id: int,
     db: DBSession,
@@ -32,10 +32,7 @@ async def get_past_attempts(
     practice_attempts = await crud.get_practice_attempts(db, stage_id)
     
     if not practice_attempts:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"practice attempt with ID {stage_id} does not exist.",
-        )
+        return []
     
     if False in [await crud.practice_attempt_owned_by(db, practice_attempt.id, currentUser.id) 
                  for practice_attempt in practice_attempts] :
